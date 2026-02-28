@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MOUN Teleprompter</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --text: #e8e8f0;
+    --text-dim: #6a6a80;
+    --accent: #ff6b35;
+    --accent-glow: rgba(255, 107, 53, 0.3);
+    --green: #22c55e;
+    --red: #ef4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+  }
+
+  .screen { display: none; flex-direction: column; height: 100dvh; }
+  .screen.active { display: flex; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── HOME ── */
+  .home-screen {
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    padding: 30px;
+    animation: fadeIn 0.5s ease;
+  }
+
+  .home-logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  .home-logo span {
+    display: block;
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-top: 4px;
+  }
+
+  .home-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .home-btn {
+    padding: 22px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.3s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .home-btn:hover, .home-btn:active {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow);
+    transform: translateY(-2px);
+  }
+
+  .home-btn .icon { font-size: 28px; margin-bottom: 8px; }
+
+  .home-btn .title {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .home-btn .desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── SETUP ── */
+  .setup-screen {
+    padding: 20px;
+    gap: 14px;
+    animation: fadeIn 0.4s ease;
+  }
+
+  .setup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+  }
+
+  .logo-sm {
+    font-family: 'Space Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .back-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .back-btn:hover { border-color: var(--text-dim); color: var(--text); }
+
+  .room-code-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .room-code-bar .label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .room-code-bar .code {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 6px;
+  }
+
+  .room-code-bar .si {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .room-code-bar .si.on {
+    background: var(--green);
+    box-shadow: 0 0 8px rgba(34,197,94,0.5);
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  .script-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .field-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  #scriptInput {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    resize: none;
+    outline: none;
+    transition: border-color 0.3s;
+  }
+
+  #scriptInput:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  #scriptInput::placeholder { color: var(--text-dim); }
+
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .setting-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+
+  .setting-group label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .setting-group input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 4px;
+    outline: none;
+  }
+
+  .setting-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+
+  .setting-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  .toggle-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: border-color 0.3s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .toggle-box:hover { border-color: var(--accent); }
+
+  .toggle-box span {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .tsw {
+    width: 40px; height: 22px;
+    background: var(--border);
+    border-radius: 11px;
+    position: relative;
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+
+  .tsw.on { background: var(--accent); }
+
+  .tsw::after {
+    content: '';
+    position: absolute;
+    width: 16px; height: 16px;
+    background: white;
+    border-radius: 50%;
+    top: 3px; left: 3px;
+    transition: transform 0.3s;
+  }
+
+  .tsw.on::after { transform: translateX(18px); }
+
+  .start-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .start-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px var(--accent-glow);
+  }
+
+  /* ── PROMPTER ── */
+  .prompter-screen { position: relative; background: var(--bg); }
+
+  .prompter-topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: linear-gradient(to bottom, rgba(10,10,15,0.95), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .prompter-screen:hover .prompter-topbar,
+  .prompter-screen.cv .prompter-topbar { opacity: 1; }
+
+  .topbar-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .topbar-btn:hover { background: rgba(255,255,255,0.15); }
+
+  .topbar-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .sdot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .sdot.playing {
+    background: var(--green);
+    box-shadow: 0 0 10px rgba(34,197,94,0.5);
+    animation: pulse 1.5s infinite;
+  }
+
+  .sdot.paused { background: var(--accent); }
+
+  .splabel {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .rzone {
+    position: absolute;
+    left: 0; right: 0;
+    top: 33%; height: 18%;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .rzone::before, .rzone::after {
+    content: '';
+    position: absolute;
+    left: 20px; right: 20px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.25;
+  }
+
+  .rzone::before { top: 0; }
+  .rzone::after { bottom: 0; }
+
+  .ftop {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 33%;
+    background: linear-gradient(to bottom, rgba(10,10,15,0.97), rgba(10,10,15,0.5), transparent);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .fbot {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 47%;
+    background: linear-gradient(to top, rgba(10,10,15,0.97), rgba(10,10,15,0.5), transparent);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .swrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #ptext {
+    padding: 48vh 24px 60vh 24px;
+    font-size: 32px;
+    line-height: 1.6;
+    font-weight: 400;
+    color: var(--text);
+    will-change: transform;
+  }
+
+  .pbar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 3px;
+    background: var(--accent);
+    z-index: 10;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+
+  .pctrls {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 20px;
+    background: linear-gradient(to top, rgba(10,10,15,0.95), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .prompter-screen:hover .pctrls,
+  .prompter-screen.cv .pctrls { opacity: 1; }
+
+  .cb {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cb:hover, .cb:active { background: rgba(255,255,255,0.2); }
+
+  .cb.pp {
+    width: 62px; height: 62px;
+    background: var(--accent);
+    border-color: var(--accent);
+    font-size: 22px;
+  }
+
+  .cb.pp:hover { box-shadow: 0 0 25px var(--accent-glow); }
+
+  .cb.sp {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* ── JOIN ── */
+  .join-screen {
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 30px;
+    animation: fadeIn 0.4s ease;
+  }
+
+  .join-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .code-wrap { display: flex; gap: 10px; }
+
+  .cd {
+    width: 56px; height: 68px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    outline: none;
+    transition: border-color 0.3s;
+    -webkit-appearance: none;
+  }
+
+  .cd:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .join-btn {
+    width: 100%;
+    max-width: 270px;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .join-btn:hover { box-shadow: 0 8px 30px var(--accent-glow); }
+
+  .jstatus {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-height: 20px;
+    text-align: center;
+  }
+
+  .jstatus.err { color: var(--red); }
+  .jstatus.ok { color: var(--green); }
+
+  /* ── REMOTE ── */
+  .remote-screen {
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 30px;
+    animation: fadeIn 0.4s ease;
+  }
+
+  .rbadge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--green);
+  }
+
+  .rbadge .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.5s infinite;
+  }
+
+  .rpb {
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-size: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 50px var(--accent-glow);
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .rpb:active { transform: scale(0.93); }
+
+  .rsrow {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .rsb {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s;
+  }
+
+  .rsb:active { background: var(--accent); border-color: var(--accent); }
+
+  .rsv {
+    font-family: 'Space Mono', monospace;
+    font-size: 32px;
+    color: var(--accent);
+    min-width: 90px;
+    text-align: center;
+  }
+
+  .r2row { display: flex; gap: 12px; margin-top: 6px; }
+
+  .r2b {
+    padding: 16px 28px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s;
+  }
+
+  .r2b:active { background: var(--border); }
+
+  .rhint {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    opacity: 0.5;
+    margin-top: 20px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--green);
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    z-index: 2000;
+    transition: transform 0.3s;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 500px) {
+    #ptext { font-size: 24px; padding: 43vh 16px 57vh 16px; }
+    .settings-row { grid-template-columns: 1fr; }
+    .cd { width: 48px; height: 58px; font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HOME -->
+<div class="screen home-screen active" id="homeScreen">
+  <div class="home-logo">PROMPTER<span>by MOUN</span></div>
+  <div class="home-btns">
+    <div class="home-btn" onclick="goTo('setup')">
+      <div class="icon">🎙️</div>
+      <div class="title">Teleprompter</div>
+      <div class="desc">Paste your script and start scrolling</div>
+    </div>
+    <div class="home-btn" onclick="goTo('join')">
+      <div class="icon">📡</div>
+      <div class="title">Remote Control</div>
+      <div class="desc">Control from another device with a code</div>
+    </div>
+  </div>
+</div>
+
+<!-- SETUP -->
+<div class="screen setup-screen" id="setupScreen">
+  <div class="setup-header">
+    <div class="logo-sm">PROMPTER</div>
+    <button class="back-btn" onclick="goTo('home')">← Back</button>
+  </div>
+
+  <div class="room-code-bar">
+    <span class="label">Room Code →</span>
+    <span class="code" id="myCode">····</span>
+    <span class="si" id="hostSi"></span>
+  </div>
+
+  <div class="script-area">
+    <span class="field-label">Your Script</span>
+    <textarea id="scriptInput" placeholder="Paste your script here...
+
+Open this same page on your phone → tap Remote Control → type the room code shown above → control wirelessly!"></textarea>
+  </div>
+
+  <div class="settings-row">
+    <div class="setting-group">
+      <label>Speed</label>
+      <input type="range" id="speedSlider" min="0.5" max="10" value="4" step="0.5">
+      <div class="setting-value" id="speedValue">4.0x</div>
+    </div>
+    <div class="setting-group">
+      <label>Font Size</label>
+      <input type="range" id="fontSlider" min="18" max="72" value="32">
+      <div class="setting-value" id="fontValue">32px</div>
+    </div>
+  </div>
+
+  <div class="toggle-box" onclick="toggleMirror()">
+    <span>Mirror Mode</span>
+    <div class="tsw" id="mirrorT"></div>
+  </div>
+
+  <button class="start-btn" onclick="startPrompter()">▶ Start Teleprompter</button>
+</div>
+
+<!-- PROMPTER -->
+<div class="screen prompter-screen" id="prompterScreen">
+  <div class="prompter-topbar">
+    <button class="topbar-btn" onclick="exitPrompter()">✕ EXIT</button>
+    <div class="topbar-info">
+      <div class="sdot" id="sDot"></div>
+      <span class="splabel" id="spLabel">4.0x</span>
+    </div>
+    <button class="topbar-btn" id="tbCode">📡</button>
+  </div>
+  <div class="ftop"></div>
+  <div class="rzone"></div>
+  <div class="fbot"></div>
+  <div class="swrap" id="sWrap"><div id="ptext"></div></div>
+  <div class="pbar" id="pBar"></div>
+  <div class="pctrls">
+    <button class="cb" onclick="resetScroll()">⏮</button>
+    <button class="cb sp" onclick="chgSpeed(-0.5)">−</button>
+    <button class="cb pp" id="ppBtn" onclick="togglePlay()">▶</button>
+    <button class="cb sp" onclick="chgSpeed(0.5)">+</button>
+    <button class="cb" onclick="exitPrompter()">⏹</button>
+    <span style="width:16px"></span>
+    <button class="cb sp" onclick="chgFont(-4)" title="Smaller text">A↓</button>
+    <button class="cb sp" onclick="chgFont(4)" title="Bigger text">A↑</button>
+  </div>
+</div>
+
+<!-- JOIN -->
+<div class="screen join-screen" id="joinScreen">
+  <div class="home-logo">PROMPTER<span>REMOTE CONTROL</span></div>
+  <div class="join-title">Enter Room Code</div>
+  <div class="code-wrap">
+    <input class="cd" type="tel" maxlength="1" id="d0" inputmode="numeric" autocomplete="off">
+    <input class="cd" type="tel" maxlength="1" id="d1" inputmode="numeric" autocomplete="off">
+    <input class="cd" type="tel" maxlength="1" id="d2" inputmode="numeric" autocomplete="off">
+    <input class="cd" type="tel" maxlength="1" id="d3" inputmode="numeric" autocomplete="off">
+  </div>
+  <button class="join-btn" onclick="joinRoom()">Connect</button>
+  <div class="jstatus" id="jStatus"></div>
+  <button class="back-btn" onclick="goTo('home')" style="margin-top:10px">← Back</button>
+</div>
+
+<!-- REMOTE -->
+<div class="screen remote-screen" id="remoteScreen">
+  <div class="home-logo">PROMPTER<span>REMOTE</span></div>
+  <div class="rbadge"><div class="dot"></div> Connected</div>
+  <button class="rpb" id="rPB" onclick="rToggle()">▶</button>
+  <div class="rsrow">
+    <button class="rsb" onclick="rSpd(-0.5)">−</button>
+    <div class="rsv" id="rSV">4.0x</div>
+    <button class="rsb" onclick="rSpd(0.5)">+</button>
+  </div>
+  <div class="r2row">
+    <button class="r2b" onclick="rCmd('reset')">⏮ RESET</button>
+    <button class="r2b" onclick="rCmd('exit')">⏹ STOP</button>
+  </div>
+  <div class="r2row">
+    <button class="r2b" onclick="rCmd('fontDown')">A↓ SMALLER</button>
+    <button class="r2b" onclick="rCmd('fontUp')">A↑ BIGGER</button>
+  </div>
+  <div class="rhint">Tap play to start scrolling</div>
+</div>
+
+<div class="toast" id="toast">✓ Done</div>
+
+<script>
+// ══════════════════ STATE ══════════════════
+let playing = false, speed = 4, fontSize = 32, mirrored = false;
+let sY = 0, lastT = null, roomCode = '', peer = null, conn = null, isHost = false;
+
+// ══════════════════ NAV ══════════════════
+function goTo(s) {
+  document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+  document.getElementById(s + 'Screen').classList.add('active');
+  if (s === 'setup' && !peer) initHost();
+  if (s === 'join') setupDigits();
+}
+
+// ══════════════════ HOST (PeerJS) ══════════════════
+function genCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
+
+function initHost() {
+  isHost = true;
+  roomCode = genCode();
+  document.getElementById('myCode').textContent = roomCode;
+
+  peer = new Peer('moun-tp-' + roomCode, { debug: 0 });
+
+  peer.on('open', () => {
+    document.getElementById('hostSi').classList.add('on');
+  });
+
+  peer.on('connection', (c) => {
+    conn = c;
+    conn.on('data', handleCmd);
+    conn.on('close', () => { conn = null; });
+    sendState();
+  });
+
+  peer.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      peer.destroy(); peer = null;
+      setTimeout(initHost, 300);
+    }
+  });
+}
+
+function sendState() {
+  if (conn && conn.open) conn.send({ t: 's', playing, speed });
+}
+
+function handleCmd(m) {
+  if (m.a === 'toggle') togglePlay();
+  else if (m.a === 'su') chgSpeed(0.5);
+  else if (m.a === 'sd') chgSpeed(-0.5);
+  else if (m.a === 'reset') resetScroll();
+  else if (m.a === 'exit') exitPrompter();
+  else if (m.a === 'fontUp') chgFont(4);
+  else if (m.a === 'fontDown') chgFont(-4);
+}
+
+// ══════════════════ JOIN (Remote) ══════════════════
+function setupDigits() {
+  const ds = [0,1,2,3].map(i => document.getElementById('d'+i));
+  ds.forEach((d,i) => {
+    d.value = '';
+    d.oninput = () => { if (d.value.length === 1 && i < 3) ds[i+1].focus(); };
+    d.onkeydown = (e) => { if (e.key==='Backspace' && !d.value && i>0) ds[i-1].focus(); };
+  });
+  setTimeout(() => ds[0].focus(), 300);
+}
+
+function joinRoom() {
+  const code = [0,1,2,3].map(i => document.getElementById('d'+i).value).join('');
+  if (code.length < 4) { jMsg('Enter all 4 digits','err'); return; }
+
+  jMsg('Connecting...','');
+
+  const rp = new Peer(undefined, { debug: 0 });
+
+  rp.on('open', () => {
+    const c = rp.connect('moun-tp-' + code, { reliable: true });
+
+    c.on('open', () => {
+      conn = c;
+      isHost = false;
+      jMsg('Connected!','ok');
+
+      setTimeout(() => goTo('remote'), 600);
+
+      conn.on('data', (m) => {
+        if (m.t === 's') {
+          document.getElementById('rPB').textContent = m.playing ? '⏸' : '▶';
+          document.getElementById('rSV').textContent = m.speed.toFixed(1) + 'x';
+        }
+      });
+
+      conn.on('close', () => { jMsg('Disconnected','err'); goTo('join'); });
+    });
+
+    c.on('error', () => jMsg('Could not connect','err'));
+  });
+
+  rp.on('error', (err) => {
+    jMsg(err.type === 'peer-unavailable' ? 'Room not found. Check code.' : 'Error. Try again.', 'err');
+  });
+}
+
+function jMsg(t, c) {
+  const e = document.getElementById('jStatus');
+  e.textContent = t;
+  e.className = 'jstatus ' + c;
+}
+
+// ══════════════════ REMOTE BUTTONS ══════════════════
+function rToggle() {
+  if (conn?.open) conn.send({a:'toggle'});
+  const b = document.getElementById('rPB');
+  b.textContent = b.textContent === '▶' ? '⏸' : '▶';
+}
+
+function rSpd(d) {
+  if (conn?.open) conn.send({a: d>0?'su':'sd'});
+  const e = document.getElementById('rSV');
+  let v = parseFloat(e.textContent);
+  v = Math.max(0.5, Math.min(10, v+d));
+  e.textContent = v.toFixed(1) + 'x';
+}
+
+function rCmd(a) {
+  if (conn?.open) conn.send({a});
+  if (a==='reset') document.getElementById('rPB').textContent = '▶';
+}
+
+// ══════════════════ SETUP ══════════════════
+document.getElementById('speedSlider').oninput = function() {
+  speed = parseFloat(this.value);
+  document.getElementById('speedValue').textContent = speed.toFixed(1) + 'x';
+};
+
+document.getElementById('fontSlider').oninput = function() {
+  fontSize = parseInt(this.value);
+  document.getElementById('fontValue').textContent = fontSize + 'px';
+};
+
+function toggleMirror() {
+  mirrored = !mirrored;
+  document.getElementById('mirrorT').classList.toggle('on', mirrored);
+}
+
+// ══════════════════ PROMPTER ══════════════════
+function startPrompter() {
+  const text = document.getElementById('scriptInput').value.trim();
+  if (!text) { document.getElementById('scriptInput').focus(); return; }
+
+  const el = document.getElementById('ptext');
+  el.innerHTML = text.replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+  el.style.fontSize = fontSize + 'px';
+  el.style.transform = mirrored ? 'scaleX(-1) translateY(0px)' : 'translateY(0px)';
+
+  sY = 0; playing = false; lastT = null;
+  updUI();
+
+  document.getElementById('tbCode').textContent = '📡 ' + roomCode;
+  document.getElementById('spLabel').textContent = speed.toFixed(1) + 'x';
+
+  document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+  document.getElementById('prompterScreen').classList.add('active');
+
+  const ps = document.getElementById('prompterScreen');
+  ps.classList.add('cv');
+  setTimeout(() => ps.classList.remove('cv'), 3000);
+
+  sendState();
+}
+
+function anim(t) {
+  if (!lastT) lastT = t;
+  const dt = t - lastT;
+  lastT = t;
+
+  if (playing) {
+    sY += (speed * 40) * (dt / 1000);
+    const el = document.getElementById('ptext');
+    const max = el.scrollHeight - window.innerHeight * 0.4;
+
+    if (sY >= max) { sY = max; playing = false; updUI(); sendState(); }
+
+    el.style.transform = mirrored
+      ? `scaleX(-1) translateY(-${sY}px)`
+      : `translateY(-${sY}px)`;
+
+    document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
+  }
+
+  requestAnimationFrame(anim);
+}
+requestAnimationFrame(anim);
+
+function togglePlay() { playing = !playing; lastT = null; updUI(); sendState(); }
+
+function chgSpeed(d) {
+  speed = Math.max(0.5, Math.min(10, speed+d));
+  document.getElementById('spLabel').textContent = speed.toFixed(1) + 'x';
+  sendState();
+}
+
+function chgFont(d) {
+  fontSize = Math.max(14, Math.min(96, fontSize+d));
+  const el = document.getElementById('ptext');
+  if (el) el.style.fontSize = fontSize + 'px';
+  sendState();
+}
+
+function resetScroll() {
+  sY = 0; playing = false; lastT = null;
+  const el = document.getElementById('ptext');
+  el.style.transform = mirrored ? 'scaleX(-1) translateY(0px)' : 'translateY(0px)';
+  document.getElementById('pBar').style.width = '0%';
+  updUI(); sendState();
+}
+
+function exitPrompter() {
+  playing = false; lastT = null; sY = 0;
+  updUI(); sendState(); goTo('setup');
+}
+
+function updUI() {
+  const b = document.getElementById('ppBtn');
+  const d = document.getElementById('sDot');
+  if (b) b.textContent = playing ? '⏸' : '▶';
+  if (d) d.className = 'sdot ' + (playing ? 'playing' : 'paused');
+}
+
+document.getElementById('sWrap')?.addEventListener('click', () => {
+  const s = document.getElementById('prompterScreen');
+  s.classList.add('cv');
+  setTimeout(() => s.classList.remove('cv'), 4000);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (['TEXTAREA','INPUT'].includes(document.activeElement.tagName)) return;
+  if (e.code==='Space') { e.preventDefault(); togglePlay(); }
+  if (e.code==='ArrowUp') { e.preventDefault(); chgSpeed(0.5); }
+  if (e.code==='ArrowDown') { e.preventDefault(); chgSpeed(-0.5); }
+  if (e.code==='KeyR') resetScroll();
+  if (e.code==='Escape') exitPrompter();
+});
+</script>
+</body>
+</html>
