@@ -353,11 +353,11 @@
     padding: 12px 20px;
     background: linear-gradient(to bottom, rgba(10,10,15,0.95), transparent);
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.4s;
+    pointer-events: none;
   }
 
-  .prompter-screen:hover .prompter-topbar,
-  .prompter-screen.cv .prompter-topbar { opacity: 1; }
+  .prompter-screen.cv .prompter-topbar { opacity: 1; pointer-events: auto; }
 
   .topbar-btn {
     background: rgba(255,255,255,0.08);
@@ -475,11 +475,11 @@
     padding: 20px;
     background: linear-gradient(to top, rgba(10,10,15,0.95), transparent);
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.4s;
+    pointer-events: none;
   }
 
-  .prompter-screen:hover .pctrls,
-  .prompter-screen.cv .pctrls { opacity: 1; }
+  .prompter-screen.cv .pctrls { opacity: 1; pointer-events: auto; }
 
   .cb {
     width: 50px; height: 50px;
@@ -697,6 +697,64 @@
 
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  /* ── COUNTDOWN ── */
+  .countdown-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .countdown-overlay .count-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 120px;
+    font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 0 60px var(--accent-glow);
+    animation: countPop 0.8s ease;
+  }
+
+  .countdown-overlay .count-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 16px;
+  }
+
+  @keyframes countPop {
+    0% { transform: scale(0.3); opacity: 0; }
+    50% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── PARAGRAPH NAV HINT ── */
+  .para-hint {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 107, 53, 0.15);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 10px 24px;
+    border-radius: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    z-index: 200;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .para-hint.show { opacity: 1; }
+
   @media (max-width: 500px) {
     #ptext { font-size: 24px; padding: 43vh 16px 57vh 16px; }
     .settings-row { grid-template-columns: 1fr; }
@@ -828,11 +886,14 @@ Open this same page on your phone → tap Remote Control → type the room code 
 </div>
 
 <div class="toast" id="toast">✓ Done</div>
+<div class="para-hint" id="paraHint">↑ Previous paragraph</div>
 
 <script>
 // ══════════════════ STATE ══════════════════
 let playing = false, speed = 4, fontSize = 32, mirrored = false;
 let sY = 0, lastT = null, roomCode = '', peer = null, conn = null, isHost = false;
+let ctrlTimer = null, ctrlsVisible = false;
+let paraBreaks = []; // stores Y positions of paragraph starts
 
 // ══════════════════ NAV ══════════════════
 function goTo(s) {
@@ -845,12 +906,24 @@ function goTo(s) {
 // ══════════════════ HOST (PeerJS) ══════════════════
 function genCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
+const peerConfig = {
+  debug: 0,
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.relay.metered.ca:80' }
+    ]
+  }
+};
+
 function initHost() {
   isHost = true;
   roomCode = genCode();
   document.getElementById('myCode').textContent = roomCode;
 
-  peer = new Peer('moun-tp-' + roomCode, { debug: 0 });
+  peer = new Peer('moun-tp-' + roomCode, peerConfig);
 
   peer.on('open', () => {
     document.getElementById('hostSi').classList.add('on');
@@ -902,12 +975,23 @@ function joinRoom() {
 
   jMsg('Connecting...','');
 
-  const rp = new Peer(undefined, { debug: 0 });
+  const rp = new Peer(undefined, peerConfig);
+  let connected = false;
+
+  // Timeout after 12 seconds
+  const timeout = setTimeout(() => {
+    if (!connected) {
+      jMsg('Connection timed out. Check the code and try again.','err');
+      try { rp.destroy(); } catch(e) {}
+    }
+  }, 12000);
 
   rp.on('open', () => {
     const c = rp.connect('moun-tp-' + code, { reliable: true });
 
     c.on('open', () => {
+      connected = true;
+      clearTimeout(timeout);
       conn = c;
       isHost = false;
       jMsg('Connected!','ok');
@@ -924,11 +1008,22 @@ function joinRoom() {
       conn.on('close', () => { jMsg('Disconnected','err'); goTo('join'); });
     });
 
-    c.on('error', () => jMsg('Could not connect','err'));
+    c.on('error', () => {
+      clearTimeout(timeout);
+      jMsg('Could not connect','err');
+    });
   });
 
   rp.on('error', (err) => {
-    jMsg(err.type === 'peer-unavailable' ? 'Room not found. Check code.' : 'Error. Try again.', 'err');
+    clearTimeout(timeout);
+    jMsg(err.type === 'peer-unavailable' ? 'Room not found. Check code.' : 'Connection error. Try again.', 'err');
+  });
+
+  rp.on('disconnected', () => {
+    if (!connected) {
+      // Try to reconnect once
+      rp.reconnect();
+    }
   });
 }
 
@@ -974,7 +1069,91 @@ function toggleMirror() {
   document.getElementById('mirrorT').classList.toggle('on', mirrored);
 }
 
+// ══════════════════ COUNTDOWN ══════════════════
+function showCountdown(cb) {
+  const overlay = document.createElement('div');
+  overlay.className = 'countdown-overlay';
+  overlay.innerHTML = '<div class="count-num">3</div><div class="count-label">Get ready</div>';
+  document.body.appendChild(overlay);
+
+  const numEl = overlay.querySelector('.count-num');
+  let count = 3;
+
+  const tick = setInterval(() => {
+    count--;
+    if (count > 0) {
+      numEl.textContent = count;
+      numEl.style.animation = 'none';
+      void numEl.offsetWidth; // reflow
+      numEl.style.animation = 'countPop 0.8s ease';
+    } else {
+      clearInterval(tick);
+      numEl.textContent = 'GO';
+      numEl.style.animation = 'none';
+      void numEl.offsetWidth;
+      numEl.style.animation = 'countPop 0.8s ease';
+      setTimeout(() => {
+        overlay.remove();
+        cb();
+      }, 600);
+    }
+  }, 1000);
+}
+
 // ══════════════════ PROMPTER ══════════════════
+function buildParaBreaks() {
+  paraBreaks = [0]; // always include position 0
+  const el = document.getElementById('ptext');
+  const threshold = (parseInt(el.style.fontSize) || 32) * 2;
+  // Walk through child nodes to find double-<br> (paragraph breaks)
+  const nodes = el.childNodes;
+  let prevWasBr = false;
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.nodeName === 'BR') {
+      if (prevWasBr) {
+        // This is a double <br> = paragraph break
+        // The next text node after this is the start of a new paragraph
+        // Use the BR's offsetTop as the paragraph position
+        paraBreaks.push(n.offsetTop);
+      }
+      prevWasBr = true;
+    } else {
+      prevWasBr = false;
+    }
+  }
+  // Remove duplicates and sort
+  paraBreaks = [...new Set(paraBreaks)].sort((a,b) => a - b);
+}
+
+function goToPrevParagraph() {
+  if (paraBreaks.length === 0) return;
+
+  // Find the paragraph break just before current scroll position
+  // Give a small margin (30px) so tapping at the very start of a paragraph goes to the previous one
+  let target = 0;
+  for (let i = paraBreaks.length - 1; i >= 0; i--) {
+    if (paraBreaks[i] < sY - 30) {
+      target = paraBreaks[i];
+      break;
+    }
+  }
+
+  sY = Math.max(0, target);
+  const el = document.getElementById('ptext');
+  el.style.transform = mirrored
+    ? `scaleX(-1) translateY(-${sY}px)`
+    : `translateY(-${sY}px)`;
+
+  const max = el.scrollHeight - window.innerHeight * 0.4;
+  document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
+
+  // Show hint
+  const hint = document.getElementById('paraHint');
+  hint.classList.add('show');
+  setTimeout(() => hint.classList.remove('show'), 1000);
+}
+
 function startPrompter() {
   const text = document.getElementById('scriptInput').value.trim();
   if (!text) { document.getElementById('scriptInput').focus(); return; }
@@ -990,14 +1169,22 @@ function startPrompter() {
   document.getElementById('tbCode').textContent = '📡 ' + roomCode;
   document.getElementById('spLabel').textContent = speed.toFixed(1) + 'x';
 
-  document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
-  document.getElementById('prompterScreen').classList.add('active');
+  // Show countdown, then start
+  showCountdown(() => {
+    document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
+    document.getElementById('prompterScreen').classList.add('active');
 
-  const ps = document.getElementById('prompterScreen');
-  ps.classList.add('cv');
-  setTimeout(() => ps.classList.remove('cv'), 3000);
+    // Build paragraph break positions after the text is rendered
+    setTimeout(() => buildParaBreaks(), 100);
 
-  sendState();
+    // Show controls briefly then auto-hide
+    showCtrls();
+
+    // Auto-play after countdown
+    playing = true; lastT = null;
+    updUI();
+    sendState();
+  });
 }
 
 function anim(t) {
@@ -1023,7 +1210,19 @@ function anim(t) {
 }
 requestAnimationFrame(anim);
 
-function togglePlay() { playing = !playing; lastT = null; updUI(); sendState(); }
+function togglePlay() {
+  playing = !playing; lastT = null; updUI(); sendState();
+  if (playing) {
+    // Auto-hide controls after a moment
+    showCtrls();
+  } else {
+    // Paused - keep controls visible
+    const ps = document.getElementById('prompterScreen');
+    ps.classList.add('cv');
+    ctrlsVisible = true;
+    clearTimeout(ctrlTimer);
+  }
+}
 
 function chgSpeed(d) {
   speed = Math.max(0.5, Math.min(10, speed+d));
@@ -1058,11 +1257,33 @@ function updUI() {
   if (d) d.className = 'sdot ' + (playing ? 'playing' : 'paused');
 }
 
-document.getElementById('sWrap')?.addEventListener('click', () => {
-  const s = document.getElementById('prompterScreen');
-  s.classList.add('cv');
-  setTimeout(() => s.classList.remove('cv'), 4000);
+// ══════════════════ AUTO-HIDE CONTROLS ══════════════════
+function showCtrls() {
+  const ps = document.getElementById('prompterScreen');
+  ps.classList.add('cv');
+  ctrlsVisible = true;
+  clearTimeout(ctrlTimer);
+  ctrlTimer = setTimeout(() => {
+    if (playing) {
+      ps.classList.remove('cv');
+      ctrlsVisible = false;
+    }
+  }, 3500);
+}
+
+// Touch/click on the text area: show controls + go to previous paragraph
+document.getElementById('sWrap')?.addEventListener('click', (e) => {
+  // If controls are hidden and we're playing, tap goes to previous paragraph
+  if (playing && !ctrlsVisible) {
+    goToPrevParagraph();
+  }
+  // Always show controls on tap
+  showCtrls();
 });
+
+// Also show controls when touching the top or bottom bars
+document.querySelector('.prompter-topbar')?.addEventListener('click', showCtrls);
+document.querySelector('.pctrls')?.addEventListener('click', showCtrls);
 
 document.addEventListener('keydown', (e) => {
   if (['TEXTAREA','INPUT'].includes(document.activeElement.tagName)) return;
