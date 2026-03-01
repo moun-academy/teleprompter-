@@ -454,6 +454,10 @@
     will-change: transform;
   }
 
+  #ptext .para {
+    margin-bottom: 1em;
+  }
+
   .pbar {
     position: absolute;
     bottom: 0; left: 0;
@@ -931,9 +935,9 @@ function initHost() {
 
   peer.on('connection', (c) => {
     conn = c;
+    conn.on('open', () => { sendState(); });
     conn.on('data', handleCmd);
     conn.on('close', () => { conn = null; });
-    sendState();
   });
 
   peer.on('error', (err) => {
@@ -1102,27 +1106,11 @@ function showCountdown(cb) {
 
 // ══════════════════ PROMPTER ══════════════════
 function buildParaBreaks() {
-  paraBreaks = [0]; // always include position 0
-  const el = document.getElementById('ptext');
-  const threshold = (parseInt(el.style.fontSize) || 32) * 2;
-  // Walk through child nodes to find double-<br> (paragraph breaks)
-  const nodes = el.childNodes;
-  let prevWasBr = false;
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    if (n.nodeName === 'BR') {
-      if (prevWasBr) {
-        // This is a double <br> = paragraph break
-        // The next text node after this is the start of a new paragraph
-        // Use the BR's offsetTop as the paragraph position
-        paraBreaks.push(n.offsetTop);
-      }
-      prevWasBr = true;
-    } else {
-      prevWasBr = false;
-    }
-  }
-  // Remove duplicates and sort
+  paraBreaks = [0];
+  const paras = document.querySelectorAll('#ptext .para');
+  paras.forEach(p => {
+    paraBreaks.push(p.offsetTop);
+  });
   paraBreaks = [...new Set(paraBreaks)].sort((a,b) => a - b);
 }
 
@@ -1159,7 +1147,9 @@ function startPrompter() {
   if (!text) { document.getElementById('scriptInput').focus(); return; }
 
   const el = document.getElementById('ptext');
-  el.innerHTML = text.replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+  el.innerHTML = text.split(/\n\n+/).map(p =>
+    '<div class="para">' + p.replace(/\n/g,'<br>') + '</div>'
+  ).join('');
   el.style.fontSize = fontSize + 'px';
   el.style.transform = mirrored ? 'scaleX(-1) translateY(0px)' : 'translateY(0px)';
 
@@ -1233,7 +1223,10 @@ function chgSpeed(d) {
 function chgFont(d) {
   fontSize = Math.max(14, Math.min(96, fontSize+d));
   const el = document.getElementById('ptext');
-  if (el) el.style.fontSize = fontSize + 'px';
+  if (el) {
+    el.style.fontSize = fontSize + 'px';
+    setTimeout(() => buildParaBreaks(), 50);
+  }
   sendState();
 }
 
@@ -1271,13 +1264,11 @@ function showCtrls() {
   }, 3500);
 }
 
-// Touch/click on the text area: show controls + go to previous paragraph
+// Touch/click on the text area: go to previous paragraph + show controls
 document.getElementById('sWrap')?.addEventListener('click', (e) => {
-  // If controls are hidden and we're playing, tap goes to previous paragraph
-  if (playing && !ctrlsVisible) {
-    goToPrevParagraph();
-  }
-  // Always show controls on tap
+  const ps = document.getElementById('prompterScreen');
+  if (!ps.classList.contains('active')) return;
+  goToPrevParagraph();
   showCtrls();
 });
 
