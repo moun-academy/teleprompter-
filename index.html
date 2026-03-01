@@ -481,6 +481,27 @@
 
   .prompter-screen.cv .pctrls { opacity: 1; pointer-events: auto; }
 
+  .prompter-screen.is-playing .prompter-topbar,
+  .prompter-screen.is-playing .pctrls {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .touch-nav {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+  }
+
+  .touch-zone {
+    flex: 1;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   .cb {
     width: 50px; height: 50px;
     border-radius: 50%;
@@ -836,6 +857,10 @@ Open this same page on your phone → tap Remote Control → type the room code 
   <div class="rzone"></div>
   <div class="fbot"></div>
   <div class="swrap" id="sWrap"><div id="ptext"></div></div>
+  <div class="touch-nav" id="touchNav" aria-hidden="true">
+    <button class="touch-zone" type="button" data-dir="prev" aria-label="Previous paragraph"></button>
+    <button class="touch-zone" type="button" data-dir="next" aria-label="Next paragraph"></button>
+  </div>
   <div class="pbar" id="pBar"></div>
   <div class="pctrls">
     <button class="cb" onclick="resetScroll()">⏮</button>
@@ -881,6 +906,10 @@ Open this same page on your phone → tap Remote Control → type the room code 
   <div class="r2row">
     <button class="r2b" onclick="rCmd('fontDown')">A↓ SMALLER</button>
     <button class="r2b" onclick="rCmd('fontUp')">A↑ BIGGER</button>
+  </div>
+  <div class="r2row">
+    <button class="r2b" onclick="rCmd('prevPara')">⬅ PREV PARA</button>
+    <button class="r2b" onclick="rCmd('nextPara')">NEXT PARA ➡</button>
   </div>
   <div class="rhint">Tap play to start scrolling</div>
 </div>
@@ -956,6 +985,8 @@ function handleCmd(m) {
   else if (m.a === 'exit') exitPrompter();
   else if (m.a === 'fontUp') chgFont(4);
   else if (m.a === 'fontDown') chgFont(-4);
+  else if (m.a === 'prevPara') goToPrevParagraph();
+  else if (m.a === 'nextPara') goToNextParagraph();
 }
 
 // ══════════════════ JOIN (Remote) ══════════════════
@@ -1148,8 +1179,34 @@ function goToPrevParagraph() {
   const max = el.scrollHeight - window.innerHeight * 0.4;
   document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
 
-  // Show hint
+  showParaHint('↑ Previous paragraph');
+}
+
+function goToNextParagraph() {
+  if (paraBreaks.length === 0) return;
+
+  const el = document.getElementById('ptext');
+  const max = el.scrollHeight - window.innerHeight * 0.4;
+  let target = max;
+
+  for (let i = 0; i < paraBreaks.length; i++) {
+    if (paraBreaks[i] > sY + 30) {
+      target = paraBreaks[i];
+      break;
+    }
+  }
+
+  sY = Math.max(0, Math.min(target, max));
+  el.style.transform = mirrored
+    ? `scaleX(-1) translateY(-${sY}px)`
+    : `translateY(-${sY}px)`;
+  document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
+  showParaHint('↓ Next paragraph');
+}
+
+function showParaHint(text) {
   const hint = document.getElementById('paraHint');
+  hint.textContent = text;
   hint.classList.add('show');
   setTimeout(() => hint.classList.remove('show'), 1000);
 }
@@ -1253,8 +1310,10 @@ function exitPrompter() {
 function updUI() {
   const b = document.getElementById('ppBtn');
   const d = document.getElementById('sDot');
+  const ps = document.getElementById('prompterScreen');
   if (b) b.textContent = playing ? '⏸' : '▶';
   if (d) d.className = 'sdot ' + (playing ? 'playing' : 'paused');
+  if (ps) ps.classList.toggle('is-playing', playing);
 }
 
 // ══════════════════ AUTO-HIDE CONTROLS ══════════════════
@@ -1271,14 +1330,11 @@ function showCtrls() {
   }, 3500);
 }
 
-// Touch/click on the text area: show controls + go to previous paragraph
-document.getElementById('sWrap')?.addEventListener('click', (e) => {
-  // If controls are hidden and we're playing, tap goes to previous paragraph
-  if (playing && !ctrlsVisible) {
-    goToPrevParagraph();
-  }
-  // Always show controls on tap
-  showCtrls();
+document.getElementById('touchNav')?.addEventListener('click', (e) => {
+  const zone = e.target.closest('.touch-zone');
+  if (!zone) return;
+  if (zone.dataset.dir === 'prev') goToPrevParagraph();
+  else goToNextParagraph();
 });
 
 // Also show controls when touching the top or bottom bars
@@ -1290,6 +1346,8 @@ document.addEventListener('keydown', (e) => {
   if (e.code==='Space') { e.preventDefault(); togglePlay(); }
   if (e.code==='ArrowUp') { e.preventDefault(); chgSpeed(0.5); }
   if (e.code==='ArrowDown') { e.preventDefault(); chgSpeed(-0.5); }
+  if (e.code==='ArrowLeft') { e.preventDefault(); goToPrevParagraph(); }
+  if (e.code==='ArrowRight') { e.preventDefault(); goToNextParagraph(); }
   if (e.code==='KeyR') resetScroll();
   if (e.code==='Escape') exitPrompter();
 });
