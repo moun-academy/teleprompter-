@@ -924,6 +924,24 @@ let sY = 0, lastT = null, roomCode = '', peer = null, conn = null, isHost = fals
 let ctrlTimer = null, ctrlsVisible = false;
 let paraBreaks = []; // stores Y positions of paragraph starts
 
+function maxScrollFor(el) {
+  return Math.max(0, el.scrollHeight - window.innerHeight * 0.4);
+}
+
+function syncTextTransform() {
+  const el = document.getElementById('ptext');
+  el.style.transform = mirrored
+    ? `scaleX(-1) translateY(-${sY}px)`
+    : `translateY(-${sY}px)`;
+}
+
+function syncProgressBar() {
+  const el = document.getElementById('ptext');
+  const max = maxScrollFor(el);
+  const pct = max > 0 ? Math.min((sY / max) * 100, 100) : 0;
+  document.getElementById('pBar').style.width = pct + '%';
+}
+
 // ══════════════════ NAV ══════════════════
 function goTo(s) {
   document.querySelectorAll('.screen').forEach(x => x.classList.remove('active'));
@@ -1002,7 +1020,7 @@ function setupDigits() {
 
 function joinRoom() {
   const code = [0,1,2,3].map(i => document.getElementById('d'+i).value).join('');
-  if (code.length < 4) { jMsg('Enter all 4 digits','err'); return; }
+  if (!/^\d{4}$/.test(code)) { jMsg('Enter a valid 4-digit code','err'); return; }
 
   jMsg('Connecting...','');
 
@@ -1171,13 +1189,8 @@ function goToPrevParagraph() {
   }
 
   sY = Math.max(0, target);
-  const el = document.getElementById('ptext');
-  el.style.transform = mirrored
-    ? `scaleX(-1) translateY(-${sY}px)`
-    : `translateY(-${sY}px)`;
-
-  const max = el.scrollHeight - window.innerHeight * 0.4;
-  document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
+  syncTextTransform();
+  syncProgressBar();
 
   showParaHint('↑ Previous paragraph');
 }
@@ -1186,7 +1199,7 @@ function goToNextParagraph() {
   if (paraBreaks.length === 0) return;
 
   const el = document.getElementById('ptext');
-  const max = el.scrollHeight - window.innerHeight * 0.4;
+  const max = maxScrollFor(el);
   let target = max;
 
   for (let i = 0; i < paraBreaks.length; i++) {
@@ -1197,10 +1210,8 @@ function goToNextParagraph() {
   }
 
   sY = Math.max(0, Math.min(target, max));
-  el.style.transform = mirrored
-    ? `scaleX(-1) translateY(-${sY}px)`
-    : `translateY(-${sY}px)`;
-  document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
+  syncTextTransform();
+  syncProgressBar();
   showParaHint('↓ Next paragraph');
 }
 
@@ -1218,9 +1229,11 @@ function startPrompter() {
   const el = document.getElementById('ptext');
   el.innerHTML = text.replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
   el.style.fontSize = fontSize + 'px';
-  el.style.transform = mirrored ? 'scaleX(-1) translateY(0px)' : 'translateY(0px)';
 
-  sY = 0; playing = false; lastT = null;
+  sY = 0;
+  syncTextTransform();
+
+  playing = false; lastT = null;
   updUI();
 
   document.getElementById('tbCode').textContent = '📡 ' + roomCode;
@@ -1252,15 +1265,12 @@ function anim(t) {
   if (playing) {
     sY += (speed * 40) * (dt / 1000);
     const el = document.getElementById('ptext');
-    const max = el.scrollHeight - window.innerHeight * 0.4;
+    const max = maxScrollFor(el);
 
     if (sY >= max) { sY = max; playing = false; updUI(); sendState(); }
 
-    el.style.transform = mirrored
-      ? `scaleX(-1) translateY(-${sY}px)`
-      : `translateY(-${sY}px)`;
-
-    document.getElementById('pBar').style.width = Math.min((sY/max)*100,100) + '%';
+    syncTextTransform();
+    syncProgressBar();
   }
 
   requestAnimationFrame(anim);
@@ -1290,15 +1300,18 @@ function chgSpeed(d) {
 function chgFont(d) {
   fontSize = Math.max(14, Math.min(96, fontSize+d));
   const el = document.getElementById('ptext');
-  if (el) el.style.fontSize = fontSize + 'px';
+  if (el) {
+    el.style.fontSize = fontSize + 'px';
+    buildParaBreaks();
+    syncProgressBar();
+  }
   sendState();
 }
 
 function resetScroll() {
   sY = 0; playing = false; lastT = null;
-  const el = document.getElementById('ptext');
-  el.style.transform = mirrored ? 'scaleX(-1) translateY(0px)' : 'translateY(0px)';
-  document.getElementById('pBar').style.width = '0%';
+  syncTextTransform();
+  syncProgressBar();
   updUI(); sendState();
 }
 
