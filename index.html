@@ -914,22 +914,54 @@ const peerConfig = {
   debug: 0,
   config: {
     iceServers: [
+      // STUN servers (discover external IP)
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun.relay.metered.ca:80' }
-    ]
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      // TURN servers (relay when direct P2P fails due to NAT/firewall)
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ],
+    iceTransportPolicy: 'all',
+    iceCandidatePoolSize: 10
   }
 };
 
+let hostReady = false;
+
 function initHost() {
   isHost = true;
+  hostReady = false;
   roomCode = genCode();
-  document.getElementById('myCode').textContent = roomCode;
+  document.getElementById('myCode').textContent = '····';
+  document.getElementById('hostSi').classList.remove('on');
 
   peer = new Peer('moun-tp-' + roomCode, peerConfig);
 
   peer.on('open', () => {
+    hostReady = true;
+    document.getElementById('myCode').textContent = roomCode;
     document.getElementById('hostSi').classList.add('on');
   });
 
@@ -938,12 +970,30 @@ function initHost() {
     conn.on('open', () => { sendState(); });
     conn.on('data', handleCmd);
     conn.on('close', () => { conn = null; });
+    conn.on('error', (err) => { console.warn('conn error:', err); });
+  });
+
+  peer.on('disconnected', () => {
+    // Try to reconnect to signaling server
+    hostReady = false;
+    document.getElementById('hostSi').classList.remove('on');
+    try { peer.reconnect(); } catch(e) {}
   });
 
   peer.on('error', (err) => {
+    console.warn('host peer error:', err.type, err.message);
     if (err.type === 'unavailable-id') {
-      peer.destroy(); peer = null;
+      try { peer.destroy(); } catch(e) {}
+      peer = null;
       setTimeout(initHost, 300);
+    } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') {
+      // Signaling server issue - retry after delay
+      hostReady = false;
+      document.getElementById('hostSi').classList.remove('on');
+      document.getElementById('myCode').textContent = 'RETRY';
+      try { peer.destroy(); } catch(e) {}
+      peer = null;
+      setTimeout(initHost, 2000);
     }
   });
 }
@@ -973,32 +1023,74 @@ function setupDigits() {
   setTimeout(() => ds[0].focus(), 300);
 }
 
+let joinAttempt = 0;
+let joinState = null; // holds current join session for cancellation
+
 function joinRoom() {
   const code = [0,1,2,3].map(i => document.getElementById('d'+i).value).join('');
   if (code.length < 4) { jMsg('Enter all 4 digits','err'); return; }
 
-  jMsg('Connecting...','');
+  // Cancel any previous attempt
+  if (joinState) {
+    try { joinState.rp.destroy(); } catch(e) {}
+    clearTimeout(joinState.timeout);
+    joinState = null;
+  }
+
+  joinAttempt++;
+  const myAttempt = joinAttempt;
+  attemptJoin(code, myAttempt, 1);
+}
+
+function attemptJoin(code, myAttempt, tryNum) {
+  if (myAttempt !== joinAttempt) return; // cancelled
+
+  const stageMsg = tryNum > 1 ? `Retrying (${tryNum}/3)...` : 'Connecting to server...';
+  jMsg(stageMsg, '');
 
   const rp = new Peer(undefined, peerConfig);
   let connected = false;
+  let signalingOpen = false;
 
-  // Timeout after 12 seconds
+  // 25s timeout total for full connection (WebRTC + TURN can be slow)
   const timeout = setTimeout(() => {
-    if (!connected) {
-      jMsg('Connection timed out. Check the code and try again.','err');
-      try { rp.destroy(); } catch(e) {}
+    if (connected || myAttempt !== joinAttempt) return;
+    try { rp.destroy(); } catch(e) {}
+
+    if (tryNum < 3) {
+      jMsg(`Connection failed. Retrying...`, '');
+      setTimeout(() => attemptJoin(code, myAttempt, tryNum + 1), 1500);
+    } else {
+      jMsg('Could not connect. Check: both devices online, same code, try again.', 'err');
+      joinState = null;
     }
-  }, 12000);
+  }, 25000);
+
+  joinState = { rp, timeout };
 
   rp.on('open', () => {
-    const c = rp.connect('moun-tp-' + code, { reliable: true });
+    if (myAttempt !== joinAttempt) return;
+    signalingOpen = true;
+    jMsg('Finding teleprompter...', '');
+
+    const c = rp.connect('moun-tp-' + code, { reliable: true, serialization: 'json' });
+
+    // Data channel open timeout (separate from overall)
+    const chTimeout = setTimeout(() => {
+      if (!connected && myAttempt === joinAttempt) {
+        jMsg('Establishing connection (this can take up to 20s)...', '');
+      }
+    }, 3000);
 
     c.on('open', () => {
+      if (myAttempt !== joinAttempt) { try { c.close(); } catch(e) {} return; }
       connected = true;
       clearTimeout(timeout);
+      clearTimeout(chTimeout);
       conn = c;
       isHost = false;
-      jMsg('Connected!','ok');
+      joinState = null;
+      jMsg('Connected!', 'ok');
 
       setTimeout(() => goTo('remote'), 600);
 
@@ -1009,24 +1101,58 @@ function joinRoom() {
         }
       });
 
-      conn.on('close', () => { jMsg('Disconnected','err'); goTo('join'); });
+      conn.on('close', () => {
+        jMsg('Disconnected', 'err');
+        conn = null;
+        goTo('join');
+      });
+
+      conn.on('error', (err) => { console.warn('conn error:', err); });
     });
 
-    c.on('error', () => {
-      clearTimeout(timeout);
-      jMsg('Could not connect','err');
+    c.on('error', (err) => {
+      console.warn('connect error:', err);
+      clearTimeout(chTimeout);
     });
   });
 
   rp.on('error', (err) => {
+    if (myAttempt !== joinAttempt) return;
+    console.warn('peer error:', err.type, err.message);
     clearTimeout(timeout);
-    jMsg(err.type === 'peer-unavailable' ? 'Room not found. Check code.' : 'Connection error. Try again.', 'err');
+
+    if (err.type === 'peer-unavailable') {
+      jMsg('Room not found. Check the code on the teleprompter.', 'err');
+      joinState = null;
+      return;
+    }
+
+    if (!signalingOpen && tryNum < 3 && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed')) {
+      jMsg('Signaling server busy. Retrying...', '');
+      try { rp.destroy(); } catch(e) {}
+      setTimeout(() => attemptJoin(code, myAttempt, tryNum + 1), 1500);
+      return;
+    }
+
+    const msg = {
+      'browser-incompatible': 'Browser not supported. Try Chrome or Safari.',
+      'ssl-unavailable': 'Page must be loaded over HTTPS.',
+      'invalid-id': 'Invalid room code.',
+      'network': 'Network error. Check internet connection.',
+      'server-error': 'Server unavailable. Try again.',
+      'socket-error': 'Connection lost. Try again.',
+      'socket-closed': 'Connection lost. Try again.',
+      'webrtc': 'WebRTC error. Try a different network.',
+      'disconnected': 'Disconnected from server.'
+    }[err.type] || 'Connection error. Try again.';
+
+    jMsg(msg, 'err');
+    joinState = null;
   });
 
   rp.on('disconnected', () => {
-    if (!connected) {
-      // Try to reconnect once
-      rp.reconnect();
+    if (!connected && myAttempt === joinAttempt) {
+      try { rp.reconnect(); } catch(e) {}
     }
   });
 }
