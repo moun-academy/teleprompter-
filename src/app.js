@@ -398,14 +398,19 @@ function createTeleprompterStage(script, promptSettings) {
       <button class="stage-control" data-stage="rewind">${icons.rewind}<span>Back</span></button>
       <button class="stage-play" data-stage="toggle" aria-label="Play">${icons.play}</button>
       <button class="stage-control" data-stage="forward">${icons.forward}<span>Forward</span></button>
-      <label class="stage-range speed-control"><span>Speed</span><input id="stage-speed" type="range" min="20" max="180" step="5" value="${promptSettings.speed}"/><output id="stage-speed-output">${promptSettings.speed}</output></label>
-      <label class="stage-range size-control"><span>Text size</span><input id="stage-size" type="range" min="30" max="96" step="2" value="${promptSettings.fontSize}"/><output id="stage-size-output">${promptSettings.fontSize}</output></label>
+      <button class="stage-control stage-settings-toggle" data-stage="settings" aria-label="Prompt settings" aria-controls="stage-settings-panel" aria-expanded="false">${icons.settings}<span>Settings</span></button>
+      <div class="stage-settings-panel" id="stage-settings-panel">
+        <label class="stage-range speed-control"><span>Speed</span><input id="stage-speed" type="range" min="20" max="180" step="5" value="${promptSettings.speed}"/><output id="stage-speed-output">${promptSettings.speed}</output></label>
+        <label class="stage-range size-control"><span>Text size</span><input id="stage-size" type="range" min="30" max="96" step="2" value="${promptSettings.fontSize}"/><output id="stage-size-output">${promptSettings.fontSize}</output></label>
+      </div>
     </div>`;
   document.body.appendChild(stage);
 
   const viewport = stage.querySelector("#stage-viewport");
   const copy = stage.querySelector("#prompt-copy");
   const playButton = stage.querySelector(".stage-play");
+  const stageControls = stage.querySelector(".stage-controls");
+  const settingsToggle = stage.querySelector(".stage-settings-toggle");
   const status = stage.querySelector("#stage-status");
   const speedInput = stage.querySelector("#stage-speed");
   const sizeInput = stage.querySelector("#stage-size");
@@ -464,8 +469,14 @@ function createTeleprompterStage(script, promptSettings) {
     try { wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* Optional enhancement. */ }
   };
 
+  const setPhoneSettingsOpen = (open) => {
+    stageControls.classList.toggle("settings-open", open);
+    settingsToggle.setAttribute("aria-expanded", String(open));
+  };
+
   const setRunning = (value) => {
     running = value;
+    if (running) setPhoneSettingsOpen(false);
     status.textContent = running ? "Prompting" : viewport.scrollTop > 0 ? "Paused" : "Ready";
     playButton.innerHTML = running ? icons.pause : icons.play;
     playButton.setAttribute("aria-label", running ? "Pause" : "Play");
@@ -602,6 +613,7 @@ function createTeleprompterStage(script, promptSettings) {
     if (action === "rewind") moveBy(-5);
     if (action === "forward") moveBy(5);
     if (action === "reset") reset();
+    if (action === "settings") setPhoneSettingsOpen(!stageControls.classList.contains("settings-open"));
   }));
   speedInput.addEventListener("input", () => applyPatch({ speed: Number(speedInput.value) }));
   sizeInput.addEventListener("input", () => applyPatch({ fontSize: Number(sizeInput.value) }));
