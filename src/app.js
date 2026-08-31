@@ -477,6 +477,7 @@ function createTeleprompterStage(script, promptSettings) {
   const setRunning = (value) => {
     running = value;
     if (running) setPhoneSettingsOpen(false);
+    settingsToggle.disabled = running;
     status.textContent = running ? "Prompting" : viewport.scrollTop > 0 ? "Paused" : "Ready";
     playButton.innerHTML = running ? icons.pause : icons.play;
     playButton.setAttribute("aria-label", running ? "Pause" : "Play");
@@ -613,7 +614,7 @@ function createTeleprompterStage(script, promptSettings) {
     if (action === "rewind") moveBy(-5);
     if (action === "forward") moveBy(5);
     if (action === "reset") reset();
-    if (action === "settings") setPhoneSettingsOpen(!stageControls.classList.contains("settings-open"));
+    if (action === "settings" && !running) setPhoneSettingsOpen(!stageControls.classList.contains("settings-open"));
   }));
   speedInput.addEventListener("input", () => applyPatch({ speed: Number(speedInput.value) }));
   sizeInput.addEventListener("input", () => applyPatch({ fontSize: Number(sizeInput.value) }));
