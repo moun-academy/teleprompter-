@@ -399,7 +399,7 @@ function createTeleprompterStage(script, promptSettings) {
       <button class="stage-play" data-stage="toggle" aria-label="Play">${icons.play}</button>
       <button class="stage-control" data-stage="forward">${icons.forward}<span>Forward</span></button>
       <label class="stage-range speed-control"><span>Speed</span><input id="stage-speed" type="range" min="20" max="180" step="5" value="${promptSettings.speed}"/><output id="stage-speed-output">${promptSettings.speed}</output></label>
-      <label class="stage-range"><span>Size</span><input id="stage-size" type="range" min="30" max="96" step="2" value="${promptSettings.fontSize}"/><output id="stage-size-output">${promptSettings.fontSize}</output></label>
+      <label class="stage-range size-control"><span>Text size</span><input id="stage-size" type="range" min="30" max="96" step="2" value="${promptSettings.fontSize}"/><output id="stage-size-output">${promptSettings.fontSize}</output></label>
     </div>`;
   document.body.appendChild(stage);
 

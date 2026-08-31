@@ -297,8 +297,16 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .stage-remote-help { top: calc(68px + env(safe-area-inset-top)); width: calc(100% - 28px); min-width: 0; padding: 10px 12px; }
   .stage-remote-help span { font-size: 9px; }
   .stage-remote-help strong { font-size: 16px; }
-  .stage-controls { min-height: 68px; gap: 11px; padding: 8px; }
-  .stage-range { display: none; }
+  .stage-controls { min-height: 150px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 52px 58px 52px; grid-template-areas: "back play forward" "speed speed speed" "size size size"; gap: 8px 15px; }
+  .is-running .stage-controls { transform: none; opacity: 1; }
+  .stage-control[data-stage="rewind"] { grid-area: back; }
+  .stage-play { grid-area: play; }
+  .stage-control[data-stage="forward"] { grid-area: forward; }
+  .stage-range { width: 100%; display: grid; grid-template-columns: 52px minmax(120px, 1fr) 32px; gap: 9px; font-size: 10px; }
+  .stage-range input { height: 5px; }
+  .stage-range output { color: #f4f1ea; font-size: 10px; }
+  .speed-control { grid-area: speed; }
+  .size-control { grid-area: size; }
   .stage-play { width: 50px; height: 50px; }
   .prompt-copy { max-width: 92% !important; }
   .remote-page { min-height: calc(100vh - 130px); display: block; }
