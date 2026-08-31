@@ -14,7 +14,7 @@ import { cleanSessionCode, connectRemote, createStageSession } from "./remote-li
 
 const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 
 let activeScript = getActiveScript();
 let settings = getSettings();
@@ -411,10 +411,12 @@ function createTeleprompterStage(script, promptSettings) {
       </div>
     </div>`;
   document.body.appendChild(stage);
+  document.body.classList.add("promptly-stage-open");
 
   const viewport = stage.querySelector("#stage-viewport");
   const copy = stage.querySelector("#prompt-copy");
   const playButton = stage.querySelector(".stage-play");
+  const fullscreenButton = stage.querySelector('[data-stage="fullscreen"]');
   const stageControls = stage.querySelector(".stage-controls");
   const settingsToggle = stage.querySelector(".stage-settings-toggle");
   const updateButton = stage.querySelector(".stage-update-button");
@@ -437,6 +439,7 @@ function createTeleprompterStage(script, promptSettings) {
   let countdownRunning = false;
   let lastSync = 0;
   let updateCheckRunning = false;
+  const useAppExpandedView = window.matchMedia("(max-width: 800px), (pointer: coarse)").matches;
 
   const transforms = [];
   if (promptSettings.mirrorX) transforms.push("scaleX(-1)");
@@ -549,8 +552,20 @@ function createTeleprompterStage(script, promptSettings) {
     playButton.innerHTML = running ? icons.pause : icons.play;
     playButton.setAttribute("aria-label", running ? "Pause" : "Play");
     stage.classList.toggle("is-running", running);
+    document.body.classList.toggle("promptly-is-running", running);
     if (running) requestWakeLock();
     syncRemote();
+  };
+
+  const toggleExpandedView = async () => {
+    if (useAppExpandedView) {
+      const expanded = stage.classList.toggle("is-expanded");
+      fullscreenButton.setAttribute("aria-label", expanded ? "Exit expanded view" : "Expand view");
+      return;
+    }
+
+    if (document.fullscreenElement) await document.exitFullscreen?.();
+    else await stage.requestFullscreen?.();
   };
 
   const moveBy = (seconds) => {
@@ -656,7 +671,7 @@ function createTeleprompterStage(script, promptSettings) {
     if (event.code === "ArrowUp") { event.preventDefault(); moveBy(-5); }
     if (event.code === "ArrowDown") { event.preventDefault(); moveBy(5); }
     if (event.code === "Home") { event.preventDefault(); reset(); }
-    if (event.key.toLowerCase() === "f") document.documentElement.requestFullscreen?.();
+    if (event.key.toLowerCase() === "f") toggleExpandedView();
     if (event.key === "Escape" && !document.fullscreenElement) destroy();
   };
 
@@ -668,6 +683,7 @@ function createTeleprompterStage(script, promptSettings) {
     sessionController = null;
     wakeLock?.release();
     document.removeEventListener("keydown", keyboard);
+    document.body.classList.remove("promptly-is-running", "promptly-stage-open");
     if (document.fullscreenElement) document.exitFullscreen?.();
     stage.remove();
     stageController = null;
@@ -676,7 +692,7 @@ function createTeleprompterStage(script, promptSettings) {
   stage.querySelectorAll("[data-stage]").forEach((button) => button.addEventListener("click", () => {
     const action = button.dataset.stage;
     if (action === "close") destroy();
-    if (action === "fullscreen") document.documentElement.requestFullscreen?.();
+    if (action === "fullscreen") toggleExpandedView();
     if (action === "toggle") startWithCountdown();
     if (action === "rewind") moveBy(-5);
     if (action === "forward") moveBy(5);

@@ -148,6 +148,7 @@ input[type="range"]::-moz-range-thumb { width: 11px; height: 11px; border: 3px s
 .prompt-settings-grid .toggle-row { min-height: 54px; }
 
 .teleprompter-stage { position: fixed; inset: 0; z-index: 200; color: #f7f5ef; background: #050607; overflow: hidden; --stage-ui: rgba(13,15,18,.87); }
+.promptly-stage-open { overflow: hidden; }
 .teleprompter-stage.theme-warm { color: #211f1a; background: #f4eddb; --stage-ui: rgba(238,229,207,.93); }
 .teleprompter-stage.theme-contrast { color: #fff700; background: #000; --stage-ui: rgba(0,0,0,.93); }
 .stage-topbar { position: absolute; z-index: 8; inset: 0 0 auto; min-height: calc(62px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); display: grid; grid-template-columns: 44px 1fr auto 44px; align-items: center; gap: 11px; background: linear-gradient(var(--stage-ui), transparent); transition: transform .3s, opacity .3s; }
@@ -295,6 +296,11 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .remote-card .button { width: 100%; }
   .prompt-settings-grid { grid-template-columns: 1fr; }
   .stage-topbar { grid-template-columns: 40px minmax(0, 1fr) auto 40px; }
+  .teleprompter-stage.is-expanded .stage-topbar { grid-template-columns: 40px 1fr 40px; }
+  .teleprompter-stage.is-expanded .stage-title,
+  .teleprompter-stage.is-expanded .stage-session,
+  .teleprompter-stage.is-expanded .stage-remote-help { display: none; }
+  .teleprompter-stage.is-expanded [data-stage="fullscreen"] { grid-column: 3; }
   .stage-session { font-size: 0; }
   .stage-session strong { font-size: 11px; }
   .stage-session strong::before { content: "Code "; font-size: 9px; color: #999; letter-spacing: 0; }
@@ -302,15 +308,18 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .stage-remote-help span { font-size: 9px; }
   .stage-remote-help strong { font-size: 16px; }
   .stage-controls { min-height: 72px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 52px 58px 52px 52px; grid-template-areas: "back play forward settings"; gap: 10px; }
-  .is-running .stage-controls { grid-template-columns: 52px 58px 52px; grid-template-areas: "back play forward"; transform: none; opacity: 1; }
+  .teleprompter-stage.is-running .stage-topbar,
+  .teleprompter-stage.is-running .stage-remote-help,
+  .teleprompter-stage.is-running .reading-guide,
+  .teleprompter-stage.is-running .stage-controls { display: none; }
+  .teleprompter-stage.is-running .stage-end { visibility: hidden; pointer-events: none; }
+  .promptly-is-running .toast-region { display: none; }
   .stage-control[data-stage="rewind"] { grid-area: back; }
   .stage-play { grid-area: play; }
   .stage-control[data-stage="forward"] { grid-area: forward; }
   .stage-settings-toggle { grid-area: settings; display: grid; }
-  .is-running .stage-settings-toggle { display: none; }
   .stage-settings-panel { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); padding: 14px; display: none; gap: 13px; border: 1px solid rgba(255,255,255,.1); border-radius: 15px; background: var(--stage-ui); box-shadow: 0 16px 38px rgba(0,0,0,.28); backdrop-filter: blur(14px); }
   .stage-controls.settings-open .stage-settings-panel { display: grid; }
-  .is-running .stage-settings-panel { display: none; }
   .stage-range { width: 100%; display: grid; grid-template-columns: 52px minmax(120px, 1fr) 32px; gap: 9px; font-size: 10px; }
   .stage-range input { height: 5px; }
   .stage-range output { color: #f4f1ea; font-size: 10px; }

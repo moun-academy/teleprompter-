@@ -1,10 +1,10 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "releasedAt": "2026-08-31",
-  "title": "Mobile reading controls",
+  "title": "Distraction-free prompting",
   "notes": [
-    "Mobile settings and the gear now disappear completely while the script is rolling.",
-    "Pausing brings the gear back without reopening or covering the script.",
-    "The settings panel can now check for and install future Promptly updates."
+    "Only the script remains visible on mobile while the text is rolling.",
+    "Pausing restores the controls and settings.",
+    "The mobile expand button now uses an in-app view without triggering the browser fullscreen notice."
   ]
 }
