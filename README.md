@@ -1,6 +1,6 @@
 # Promptly Teleprompter
 
-Promptly is an installable, offline-ready teleprompter PWA. The phone runs the prompt and a laptop controls it through a direct WebRTC data connection.
+Promptly is an installable, offline-ready teleprompter PWA. The phone runs the prompt and a laptop controls it through a Supabase Realtime cloud relay.
 
 ## Included
 
@@ -42,6 +42,6 @@ Deploy the `dist` output to any HTTPS host. On Android, open the URL in Chrome a
 1. On the phone, open a script and tap **Start prompting**. The phone creates and shows a six-character code.
 2. On the laptop, open the same Promptly URL and choose **Remote**.
 3. Enter the phone's code on the laptop. Do not open the code-entry screen on both devices.
-4. The laptop now controls the phone. The connection uses PeerJS for signaling and WebRTC for the live control channel.
+4. The laptop now controls the phone through the shared Promptly cloud room. Both devices need internet, but they do not need the same Wi-Fi.
 
-For higher-traffic or private infrastructure, point `src/remote-link.js` at a self-hosted PeerServer.
+The laptop is only marked connected after the phone answers. Heartbeats detect interruptions, and important control messages retry safely until the phone confirms them.

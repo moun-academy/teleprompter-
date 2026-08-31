@@ -1,7 +1,14 @@
-import { Peer } from "peerjs";
+import { createClient } from "@supabase/supabase-js";
 
-const PREFIX = "promptly-stage-";
+const SUPABASE_URL = __SUPABASE_URL__;
+const SUPABASE_KEY = __SUPABASE_PUBLISHABLE_KEY__;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const HEARTBEAT_MS = 2000;
+const CONNECTION_TIMEOUT_MS = 10000;
+const RETRY_MS = 700;
+const MAX_RETRIES = 5;
+
+let realtimeClient;
 
 function randomCode(length = 6) {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
@@ -9,11 +16,22 @@ function randomCode(length = 6) {
 }
 
 function normalizeCode(code) {
-  return code.toUpperCase().replace(/[^A-Z2-9]/g, "").slice(0, 6);
+  return String(code || "").toUpperCase().replace(/[^A-Z2-9]/g, "").slice(0, 6);
 }
 
-function peerId(code) {
-  return `${PREFIX}${normalizeCode(code).toLowerCase()}`;
+function clientId() {
+  return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getRealtimeClient() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Remote service is not configured.");
+  if (!realtimeClient) {
+    realtimeClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      realtime: { params: { eventsPerSecond: 20 } }
+    });
+  }
+  return realtimeClient;
 }
 
 function connectionWrapper() {
@@ -30,86 +48,190 @@ function connectionWrapper() {
   };
 }
 
-export function createStageSession(preferredCode) {
-  const events = connectionWrapper();
-  let code = normalizeCode(preferredCode || randomCode());
-  let peer;
-  let connection;
-  let manuallyClosed = false;
-
-  const openPeer = () => {
-    peer = new Peer(peerId(code), { debug: 1 });
-    peer.on("open", () => events.emit("ready", { code }));
-    peer.on("connection", (incoming) => {
-      if (connection?.open) connection.close();
-      connection = incoming;
-      connection.on("open", () => events.emit("connected", { code }));
-      connection.on("data", (data) => events.emit("message", data));
-      connection.on("close", () => events.emit("disconnected"));
-      connection.on("error", (error) => events.emit("error", error));
-    });
-    peer.on("error", (error) => {
-      if (error.type === "unavailable-id" && !preferredCode && !manuallyClosed) {
-        peer.destroy();
-        code = randomCode();
-        openPeer();
-        return;
-      }
-      events.emit("error", error);
-    });
-    peer.on("disconnected", () => events.emit("disconnected"));
-  };
-
-  openPeer();
-
-  return {
-    get code() { return code; },
-    on: events.on,
-    send(payload) {
-      if (connection?.open) connection.send(payload);
-    },
-    close() {
-      manuallyClosed = true;
-      connection?.close();
-      peer?.destroy();
-    }
-  };
+function broadcast(channel, event, payload) {
+  if (!channel) return;
+  channel.send({ type: "broadcast", event, payload }).then((status) => {
+    if (status !== "ok") console.warn("Promptly realtime delivery:", status);
+  }).catch((error) => console.warn("Promptly realtime delivery:", error));
 }
 
-export function connectRemote(rawCode) {
-  const code = normalizeCode(rawCode);
+function cloudSession(role, rawCode) {
+  const code = normalizeCode(rawCode || randomCode());
   const events = connectionWrapper();
-  const peer = new Peer(undefined, { debug: 1 });
-  let connection;
-  let stopped = false;
+  const id = clientId();
+  const inboundEvent = role === "stage" ? "remote-message" : "stage-message";
+  const outboundEvent = role === "stage" ? "stage-message" : "remote-message";
+  const seenMessages = new Set();
+  const pending = new Map();
+  let channel;
+  let subscribed = false;
+  let connected = false;
+  let manuallyClosed = false;
+  let lastPeerActivity = 0;
+  let heartbeatTimer;
+  let retryTimer;
+  let readyEmitted = false;
 
-  peer.on("open", () => {
-    if (stopped) return;
-    events.emit("connecting", { code });
-    connection = peer.connect(peerId(code), { reliable: true, metadata: { role: "remote" } });
-    connection.on("open", () => {
-      events.emit("connected", { code });
-      connection.send({ type: "hello", role: "remote" });
-    });
-    connection.on("data", (data) => events.emit("message", data));
-    connection.on("close", () => events.emit("disconnected"));
-    connection.on("error", (error) => events.emit("error", error));
+  const sendRaw = (payload) => broadcast(channel, outboundEvent, {
+    ...payload,
+    code,
+    senderId: id,
+    sentAt: Date.now()
   });
-  peer.on("error", (error) => events.emit("error", error));
-  peer.on("disconnected", () => events.emit("disconnected"));
+
+  const markConnected = () => {
+    lastPeerActivity = Date.now();
+    if (connected) return;
+    connected = true;
+    events.emit("connected", { code });
+  };
+
+  const acknowledge = (message) => {
+    if (!message.messageId) return;
+    sendRaw({ type: "applied", messageId: message.messageId, targetId: message.senderId });
+  };
+
+  const receive = (message) => {
+    if (!message || message.code !== code || message.senderId === id) return;
+    if (message.targetId && message.targetId !== id) return;
+    lastPeerActivity = Date.now();
+
+    if (role === "stage") {
+      if (message.type === "hello" || message.type === "heartbeat") {
+        markConnected();
+        if (message.type === "hello") sendRaw({ type: "hello-ack", targetId: message.senderId });
+        return;
+      }
+      if (message.type === "command" || message.type === "settings") {
+        markConnected();
+        if (message.messageId && seenMessages.has(message.messageId)) {
+          acknowledge(message);
+          return;
+        }
+        if (message.messageId) {
+          seenMessages.add(message.messageId);
+          if (seenMessages.size > 200) seenMessages.delete(seenMessages.values().next().value);
+        }
+        events.emit("message", message);
+        acknowledge(message);
+      }
+      return;
+    }
+
+    if (message.type === "hello-ack") {
+      markConnected();
+      return;
+    }
+    if (message.type === "applied") {
+      pending.delete(message.messageId);
+      return;
+    }
+    if (message.type === "heartbeat") {
+      if (connected) lastPeerActivity = Date.now();
+      return;
+    }
+    if (message.type === "state") {
+      markConnected();
+      events.emit("message", message);
+    }
+  };
+
+  const startTimers = () => {
+    clearInterval(heartbeatTimer);
+    clearInterval(retryTimer);
+    heartbeatTimer = setInterval(() => {
+      if (!subscribed || manuallyClosed) return;
+      sendRaw({ type: role === "remote" && !connected ? "hello" : "heartbeat" });
+      if (connected && Date.now() - lastPeerActivity > CONNECTION_TIMEOUT_MS) {
+        connected = false;
+        events.emit("disconnected");
+      }
+    }, HEARTBEAT_MS);
+
+    retryTimer = setInterval(() => {
+      if (role !== "remote" || !subscribed || manuallyClosed) return;
+      for (const [messageId, item] of pending) {
+        if (Date.now() - item.lastAttempt < RETRY_MS) continue;
+        if (item.attempts >= MAX_RETRIES) {
+          pending.delete(messageId);
+          events.emit("error", new Error("The phone did not confirm that control. Please try again."));
+          continue;
+        }
+        item.attempts += 1;
+        item.lastAttempt = Date.now();
+        sendRaw(item.payload);
+      }
+    }, 250);
+  };
+
+  queueMicrotask(() => {
+    let client;
+    try {
+      client = getRealtimeClient();
+    } catch (error) {
+      events.emit("error", error);
+      return;
+    }
+
+    channel = client.channel(`promptly:${code.toLowerCase()}`, {
+      config: { broadcast: { ack: true, self: false } }
+    });
+    channel.on("broadcast", { event: inboundEvent }, ({ payload }) => receive(payload));
+    channel.subscribe((status) => {
+      if (manuallyClosed) return;
+      if (status === "SUBSCRIBED") {
+        subscribed = true;
+        if (role === "stage" && !readyEmitted) {
+          readyEmitted = true;
+          events.emit("ready", { code });
+        }
+        if (role === "remote") {
+          events.emit("connecting", { code });
+          sendRaw({ type: "hello" });
+        }
+        startTimers();
+        return;
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        subscribed = false;
+        events.emit("reconnecting", { code });
+      }
+      if (status === "CLOSED") subscribed = false;
+    });
+  });
 
   return {
     code,
     on: events.on,
     send(payload) {
-      if (connection?.open) connection.send(payload);
+      if (!payload || manuallyClosed) return;
+      if (role === "remote" && (payload.type === "command" || payload.type === "settings")) {
+        const messageId = clientId();
+        const reliablePayload = { ...payload, messageId };
+        pending.set(messageId, { payload: reliablePayload, attempts: 1, lastAttempt: Date.now() });
+        sendRaw(reliablePayload);
+        return;
+      }
+      sendRaw(payload);
     },
     close() {
-      stopped = true;
-      connection?.close();
-      peer.destroy();
+      manuallyClosed = true;
+      subscribed = false;
+      connected = false;
+      clearInterval(heartbeatTimer);
+      clearInterval(retryTimer);
+      pending.clear();
+      if (channel) getRealtimeClient().removeChannel(channel);
     }
   };
+}
+
+export function createStageSession(preferredCode) {
+  return cloudSession("stage", preferredCode);
+}
+
+export function connectRemote(rawCode) {
+  return cloudSession("remote", rawCode);
 }
 
 export function cleanSessionCode(value) {

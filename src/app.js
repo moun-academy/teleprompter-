@@ -147,7 +147,7 @@ function renderWorkspace() {
           <div class="remote-visual"><span class="signal signal-one"></span><span class="signal signal-two"></span>${icons.remote}</div>
           <span class="section-kicker coral">Hands-free control</span>
           <h2>Control it from your laptop.</h2>
-          <p>Your phone and laptop connect directly. No account, cable, or shared Wi-Fi required.</p>
+          <p>Your phone and laptop connect through Promptly’s secure cloud relay. Both need internet, but no account, cable, or shared Wi-Fi.</p>
           <button class="button dark wide" data-action="open-remote-page">${icons.remote}<span>Open remote control</span></button>
         </div>
         <div class="quick-settings panel">
@@ -542,6 +542,10 @@ function createTeleprompterStage(script, promptSettings) {
     remoteHelp.classList.remove("hidden");
     connectionDot.classList.remove("connected");
   });
+  sessionController.on("reconnecting", () => {
+    sessionLabel.textContent = "Reconnecting remote…";
+    connectionDot.classList.remove("connected");
+  });
   sessionController.on("message", handleRemoteMessage);
   sessionController.on("error", (error) => {
     sessionLabel.textContent = "Remote unavailable";
@@ -673,7 +677,7 @@ function connectToStage() {
     if (!settled) {
       remote.close();
       setButtonBusy(button, false);
-      toast("Could not find that phone. Check the code and try again.", "error");
+      toast("That phone is not online with this code. Keep its teleprompter open and try again.", "error");
     }
   }, 12000);
   remote.on("connected", () => {
@@ -687,7 +691,7 @@ function connectToStage() {
     clearTimeout(timeout);
     remote.close();
     setButtonBusy(button, false);
-    toast(error.type === "peer-unavailable" ? "No phone found with that code." : error.message, "error");
+    toast(error.message, "error");
   });
 }
 
@@ -740,6 +744,8 @@ function renderRemoteControls(remote, code) {
   };
 
   remote.on("message", (message) => { if (message?.type === "state") update(message.state); });
+  remote.on("reconnecting", () => toast("Connection interrupted. Reconnecting…", "error"));
+  remote.on("error", (error) => toast(error.message, "error"));
   remote.on("disconnected", () => {
     toast("Phone disconnected.", "error");
     renderRemoteLanding();

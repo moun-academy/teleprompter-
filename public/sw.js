@@ -1,4 +1,4 @@
-const CACHE_NAME = "promptly-v4";
+const CACHE_NAME = "promptly-v5";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -6,6 +6,7 @@ const APP_SHELL = [
   "/assets/app.css",
   "/assets/mammoth.js",
   "/assets/index.js",
+  "/assets/supabase.js",
   "/manifest.webmanifest",
   "/icons/promptly.svg",
   "/icons/promptly-maskable.svg"
