@@ -1,0 +1,35 @@
+{
+  "name": "Promptly Teleprompter",
+  "short_name": "Promptly",
+  "description": "A focused teleprompter with Google Drive scripts and laptop remote control.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/promptly.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/promptly-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open remote control",
+      "short_name": "Remote",
+      "url": "/?remote=1",
+      "icons": [{ "src": "/icons/promptly.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}
