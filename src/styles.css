@@ -55,6 +55,8 @@ h1, h2, h3 { font-family: "Manrope", sans-serif; letter-spacing: -.04em; }
 .button.ghost { background: var(--white); border-color: var(--line); }
 .button.ghost:hover { border-color: #cfccc4; }
 .button.drive { background: #fff; border-color: #d9dce0; }
+.button.cloud-import { background: var(--black); border-color: var(--black); color: white; }
+.button.cloud-import:hover { background: #292d33; }
 .button.primary { background: var(--coral); color: white; box-shadow: 0 9px 25px rgba(255, 107, 69, .23); }
 .button.primary:hover { background: var(--coral-dark); }
 .button.dark { background: var(--black); color: white; }
@@ -160,6 +162,10 @@ input[type="range"]::-moz-range-thumb { width: 11px; height: 11px; border: 3px s
 .connection-dot { width: 7px; height: 7px; border-radius: 50%; background: #777; }
 .connection-dot.ready { background: #e9a83b; box-shadow: 0 0 0 4px rgba(233,168,59,.12); }
 .connection-dot.connected { background: #43b983; box-shadow: 0 0 0 4px rgba(67,185,131,.13); }
+.stage-remote-help { position: absolute; z-index: 9; top: calc(75px + env(safe-area-inset-top)); left: 50%; min-width: 290px; padding: 11px 17px; display: flex; align-items: center; justify-content: center; gap: 11px; border: 1px solid rgba(255,255,255,.12); border-radius: 13px; color: #aeb4bc; background: rgba(20,23,27,.9); box-shadow: 0 12px 35px rgba(0,0,0,.25); backdrop-filter: blur(12px); transform: translateX(-50%); font-size: 10px; transition: opacity .25s, transform .25s; }
+.stage-remote-help strong { color: var(--coral); font-size: 17px; letter-spacing: 2.4px; }
+.is-running .stage-remote-help { opacity: 0; pointer-events: none; transform: translate(-50%, -8px); }
+.theme-warm .stage-remote-help { border-color: rgba(0,0,0,.12); color: #56524a; background: rgba(244,237,219,.93); }
 .stage-viewport { position: absolute; inset: 0; padding: 52vh 3vw 60vh; overflow-y: scroll; overscroll-behavior: contain; scrollbar-width: none; }
 .stage-viewport::-webkit-scrollbar { display: none; }
 .prompt-copy { width: 100%; max-width: 78%; margin: 0 auto; font-weight: 600; letter-spacing: -.018em; overflow-wrap: anywhere; transform-origin: center center; }
@@ -183,9 +189,16 @@ input[type="range"]::-moz-range-thumb { width: 11px; height: 11px; border: 3px s
 .remote-page-copy { max-width: 510px; padding: 5vh 0; }
 .remote-page-copy h1 { margin: 0 0 19px; font-size: clamp(48px, 6vw, 78px); line-height: .98; font-weight: 600; }
 .remote-page-copy > p { max-width: 480px; margin-bottom: 35px; color: #6f747b; font-size: 16px; line-height: 1.65; }
-.connection-form { padding: 21px; display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 17px; background: white; box-shadow: var(--shadow); }
+.remote-steps { display: grid; gap: 12px; }
+.role-card { position: relative; padding: 18px 18px 18px 63px; display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 17px; background: white; box-shadow: 0 10px 35px rgba(30,32,36,.05); }
+.role-card h2 { margin: 2px 0 5px; font-size: 18px; }
+.role-card p { margin: 0; color: #777c83; font-size: 11px; line-height: 1.5; }
+.step-number { position: absolute; top: 18px; left: 18px; width: 31px; height: 31px; border-radius: 50%; display: grid; place-items: center; color: white; background: var(--coral); font: 700 12px/1 "Manrope", sans-serif; }
+.role-label { color: #92969c; font-size: 9px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; }
+.phone-role { background: #f0eee8; border-color: #dedbd3; }
+.phone-role .button { width: fit-content; min-width: 215px; }
+.connection-form { display: grid; gap: 8px; }
 .connection-form > label { color: #555a61; font-size: 11px; font-weight: 650; }
-.connection-form small { color: #92969d; font-size: 10px; }
 .code-entry { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
 .code-entry input { min-width: 0; height: 53px; padding: 0 16px; border: 1px solid #d9d7d0; border-radius: 11px; color: var(--ink); background: #fbfaf7; font: 700 24px/1 "Manrope", sans-serif; letter-spacing: 7px; text-transform: uppercase; }
 .code-entry .button { min-width: 120px; }
@@ -281,6 +294,9 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .stage-session { font-size: 0; }
   .stage-session strong { font-size: 11px; }
   .stage-session strong::before { content: "Code "; font-size: 9px; color: #999; letter-spacing: 0; }
+  .stage-remote-help { top: calc(68px + env(safe-area-inset-top)); width: calc(100% - 28px); min-width: 0; padding: 10px 12px; }
+  .stage-remote-help span { font-size: 9px; }
+  .stage-remote-help strong { font-size: 16px; }
   .stage-controls { min-height: 68px; gap: 11px; padding: 8px; }
   .stage-range { display: none; }
   .stage-play { width: 50px; height: 50px; }
@@ -288,6 +304,7 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .remote-page { min-height: calc(100vh - 130px); display: block; }
   .remote-page-copy { margin: 0 auto; }
   .remote-page-copy h1 { font-size: 52px; }
+  .role-card { padding-left: 58px; }
   .remote-demo { display: none; }
   .control-room { padding: 0; }
   .control-header { align-items: flex-start; }

@@ -7,8 +7,8 @@ Promptly is an installable, offline-ready teleprompter PWA. The phone runs the p
 - Smooth, frame-timed scrolling with adjustable speed, text size, line spacing, and width
 - Horizontal and vertical mirror modes for beam-splitter glass
 - Laptop remote for play/pause, 5-second moves, restart, position, speed, and font size
-- Google Drive Picker for Google Docs and text scripts using per-file access
-- Local script library, text/Markdown uploads, auto-save, countdown, fullscreen, and screen wake lock
+- Simple Word (`.docx`), text, and Markdown import from Google Drive, OneDrive, or local storage
+- Local script library, auto-save, countdown, fullscreen, and screen wake lock
 - PWA manifest and offline app shell
 
 ## Run locally
@@ -18,18 +18,15 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-## Enable Google Drive
+## Import a script
 
-Google requires each deployed web app to use its own Google Cloud browser credentials.
+Choose **Word, Drive or OneDrive**. The normal device file picker opens:
 
-1. In Google Cloud Console, enable **Google Drive API** and **Google Picker API**.
-2. Configure the OAuth consent screen.
-3. Create an **OAuth 2.0 Client ID** of type **Web application** and add the deployed HTTPS URL to **Authorized JavaScript origins**.
-4. Create an API key restricted to the deployed domain and the Drive/Picker APIs.
-5. Copy the Google Cloud project number.
-6. Add the three values to `.env.local` using `.env.example`, or enter them in Promptly under **Settings**.
+- On a phone, choose Google Drive, OneDrive, or Files from the picker. Install the relevant Drive/OneDrive phone app if it is not listed.
+- On a laptop, choose a synced OneDrive/Google Drive folder or a local file.
+- Modern Word `.docx`, `.txt`, `.md`, and `.rtf` files are accepted. Older binary `.doc` files must first be saved as `.docx` in Word.
 
-Promptly requests the `drive.file` scope. This only grants access to files the user explicitly opens with the app.
+The selected document is read locally in the browser. There is no Google OAuth setup and the file is not uploaded to Promptly.
 
 ## Build
 
@@ -42,8 +39,9 @@ Deploy the `dist` output to any HTTPS host. On Android, open the URL in Chrome a
 
 ## Remote control
 
-1. Start prompting on the phone and note the six-character code at the top.
-2. Open the same deployed Promptly URL on the laptop and choose **Remote**.
-3. Enter the code. The connection uses PeerJS for signaling and WebRTC for the live control channel.
+1. On the phone, open a script and tap **Start prompting**. The phone creates and shows a six-character code.
+2. On the laptop, open the same Promptly URL and choose **Remote**.
+3. Enter the phone's code on the laptop. Do not open the code-entry screen on both devices.
+4. The laptop now controls the phone. The connection uses PeerJS for signaling and WebRTC for the live control channel.
 
 For higher-traffic or private infrastructure, point `src/remote-link.js` at a self-hosted PeerServer.

@@ -1,7 +1,7 @@
 {
   "name": "Promptly Teleprompter",
   "short_name": "Promptly",
-  "description": "A focused teleprompter with Google Drive scripts and laptop remote control.",
+  "description": "A focused teleprompter with Word and cloud-file import plus laptop remote control.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

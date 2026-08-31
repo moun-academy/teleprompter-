@@ -11,7 +11,6 @@ import {
   setActiveScript
 } from "./storage.js";
 import { cleanSessionCode, connectRemote, createStageSession } from "./remote-link.js";
-import { pickGoogleDriveScript } from "./google-drive.js";
 
 const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
@@ -26,6 +25,7 @@ let saveTimer = null;
 const icons = {
   logo: `<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="8" fill="currentColor" opacity=".12"/><path d="M9 10h14M9 15h10M9 20h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="22" cy="24" r="2.6" fill="#ff6b45"/></svg>`,
   drive: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0F9D58" d="m8.5 3 3.2 5.5L6.2 18H2.9l-1.6-2.8L8.5 3Z"/><path fill="#F4B400" d="M8.5 3h6.4l3.2 5.5h-6.4L8.5 3Z"/><path fill="#4285F4" d="m18.1 8.5 3.7 6.4-1.7 3.1H6.2l3.2-5.5h6.9l1.8-4Z"/></svg>`,
+  cloud: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .7-7.94A6.5 6.5 0 0 0 5.6 9.1 4.75 4.75 0 0 0 7 18.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 15V9.5m0 0-2.2 2.2M12 9.5l2.2 2.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   upload: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></svg>`,
   pause: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zm5 0h3v14h-3z" fill="currentColor"/></svg>`,
@@ -95,7 +95,7 @@ function shell(content, active = "scripts") {
 
 function scriptCard(script) {
   const selected = script.id === activeScript.id;
-  const sourceLabel = script.source === "google-drive" ? "Drive" : script.source === "upload" ? "Upload" : "Local";
+  const sourceLabel = script.source === "word" ? "Word" : script.source === "upload" ? "File" : "Local";
   return `<button class="script-card ${selected ? "selected" : ""}" data-script-id="${escapeHtml(script.id)}">
     <span class="script-card-copy"><strong>${escapeHtml(script.title)}</strong><small>${sourceLabel} · ${formatRelativeDate(script.updatedAt)}</small></span>
     ${icons.chevron}
@@ -111,9 +111,8 @@ function renderWorkspace() {
         <h1>Ready when you are.</h1>
       </div>
       <div class="header-actions">
-        <input id="script-upload" type="file" accept=".txt,.md,.rtf,text/plain,text/markdown,application/rtf" hidden />
-        <button class="button ghost" data-action="upload-script">${icons.upload}<span>Upload</span></button>
-        <button class="button drive" data-action="drive-import">${icons.drive}<span>Google Drive</span></button>
+        <input id="script-upload" type="file" accept=".docx,.doc,.txt,.md,.rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain,text/markdown,application/rtf" hidden />
+        <button class="button cloud-import" data-action="upload-script">${icons.cloud}<span>Word, Drive or OneDrive</span></button>
       </div>
     </header>
 
@@ -124,7 +123,7 @@ function renderWorkspace() {
           <button class="icon-button light" data-action="new-script" aria-label="New script">${icons.plus}</button>
         </div>
         <div class="script-list">${library.map(scriptCard).join("")}</div>
-        <button class="text-button" data-action="drive-import">${icons.drive} Open from Google Drive</button>
+        <button class="text-button" data-action="upload-script">${icons.cloud} Choose Word, Drive or OneDrive</button>
       </aside>
 
       <section class="editor-panel panel">
@@ -234,11 +233,10 @@ async function handleAction(event) {
   if (action === "home") renderWorkspace();
   if (action === "new-script") createNewScript();
   if (action === "upload-script") document.querySelector("#script-upload")?.click();
-  if (action === "drive-import") await importFromDrive(event.currentTarget);
   if (action === "delete-script") removeActiveScript();
   if (action === "launch-stage") launchStage();
   if (action === "open-stage-settings") openPromptSettings();
-  if (action === "open-settings") openAppSettings();
+  if (action === "open-settings") openPromptSettings();
   if (action === "open-remote-page") renderRemoteLanding();
   if (action === "install-app") await installApp();
 }
@@ -264,44 +262,37 @@ function removeActiveScript() {
 async function importLocalFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  if (file.size > 2_000_000) {
-    toast("That file is too large. Please choose a script under 2 MB.", "error");
+  if (file.size > 10_000_000) {
+    toast("That file is too large. Please choose a script under 10 MB.", "error");
     return;
   }
-  const body = await file.text();
-  activeScript = saveScript({
-    id: makeId("upload"),
-    title: file.name.replace(/\.[^.]+$/, ""),
-    body,
-    source: "upload",
-    updatedAt: Date.now()
-  });
-  renderWorkspace();
-  toast("Script imported.", "success");
-}
-
-async function importFromDrive(button) {
-  setButtonBusy(button, true, "Connecting…");
   try {
-    const imported = await pickGoogleDriveScript(settings);
+    const isWordDocument = file.name.toLowerCase().endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (file.name.toLowerCase().endsWith(".doc")) {
+      throw new Error("This is an older .doc file. In Word, choose Save As → .docx, then select it again.");
+    }
+    toast(isWordDocument ? "Reading Word document…" : "Reading script…");
+    let body;
+    if (isWordDocument) {
+      const { default: mammoth } = await import("mammoth");
+      body = (await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() })).value.trim();
+    } else {
+      body = await file.text();
+    }
+    if (!body.trim()) throw new Error("No readable script text was found in that file.");
     activeScript = saveScript({
-      id: `drive-${imported.id}`,
-      driveFileId: imported.id,
-      driveMimeType: imported.mimeType,
-      title: imported.name.replace(/\.[^.]+$/, ""),
-      body: imported.text,
-      source: "google-drive",
+      id: makeId(isWordDocument ? "word" : "upload"),
+      title: file.name.replace(/\.[^.]+$/, ""),
+      body,
+      source: isWordDocument ? "word" : "upload",
       updatedAt: Date.now()
     });
     renderWorkspace();
-    toast("Google Drive script is ready.", "success");
+    toast(isWordDocument ? "Word script imported." : "Script imported.", "success");
   } catch (error) {
-    if (error.name !== "AbortError") {
-      if (error.message.includes("setup is incomplete")) openAppSettings(true);
-      toast(error.message, "error");
-    }
+    toast(error.message || "That script could not be opened.", "error");
   } finally {
-    setButtonBusy(button, false);
+    event.target.value = "";
   }
 }
 
@@ -315,31 +306,6 @@ function modal(content, className = "") {
   document.body.appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add("visible"));
   return wrap;
-}
-
-function openAppSettings(focusGoogle = false) {
-  const wrap = modal(`
-    <div class="modal-header"><div><span class="section-kicker">App settings</span><h2>Connect your tools</h2></div><button class="icon-button light" data-close-modal aria-label="Close">×</button></div>
-    <div class="settings-section">
-      <div class="settings-intro">${icons.drive}<div><strong>Google Drive</strong><p>Use read-only, per-file access to open Google Docs and text scripts.</p></div></div>
-      <label class="input-field"><span>OAuth client ID</span><input id="google-client-id" autocomplete="off" value="${escapeHtml(settings.googleClientId)}" placeholder="…apps.googleusercontent.com" /></label>
-      <label class="input-field"><span>API key</span><input id="google-api-key" autocomplete="off" value="${escapeHtml(settings.googleApiKey)}" placeholder="AIza…" /></label>
-      <label class="input-field"><span>Google Cloud project number</span><input id="google-app-id" inputmode="numeric" autocomplete="off" value="${escapeHtml(settings.googleAppId)}" placeholder="123456789012" /></label>
-      <p class="privacy-note">These public browser credentials stay on this device. Your script is only downloaded after you choose it.</p>
-    </div>
-    <div class="modal-footer"><button class="button ghost" data-close-modal>Cancel</button><button class="button primary" id="save-app-settings">Save settings</button></div>
-  `, "settings-modal");
-
-  wrap.querySelector("#save-app-settings").addEventListener("click", () => {
-    settings = saveSettings({
-      googleClientId: wrap.querySelector("#google-client-id").value.trim(),
-      googleApiKey: wrap.querySelector("#google-api-key").value.trim(),
-      googleAppId: wrap.querySelector("#google-app-id").value.trim()
-    });
-    wrap.remove();
-    toast("Settings saved.", "success");
-  });
-  if (focusGoogle) setTimeout(() => wrap.querySelector("#google-client-id")?.focus(), 80);
 }
 
 function openPromptSettings() {
@@ -418,6 +384,10 @@ function createTeleprompterStage(script, promptSettings) {
       <div class="stage-session"><span class="connection-dot" id="connection-dot"></span><span id="stage-session-label">Creating remote…</span></div>
       <button class="stage-icon-button" data-stage="fullscreen" aria-label="Full screen">${icons.fullscreen}</button>
     </div>
+    <div class="stage-remote-help" id="stage-remote-help">
+      <span>On your laptop, open Remote and enter</span>
+      <strong id="stage-remote-code">······</strong>
+    </div>
     <div class="reading-guide ${promptSettings.cueLine ? "" : "hidden"}"><span></span></div>
     <div class="stage-viewport" id="stage-viewport">
       <article class="prompt-copy" id="prompt-copy">${escapeHtml(script.body).replace(/\n/g, "<br>")}</article>
@@ -441,6 +411,8 @@ function createTeleprompterStage(script, promptSettings) {
   const sizeInput = stage.querySelector("#stage-size");
   const sessionLabel = stage.querySelector("#stage-session-label");
   const connectionDot = stage.querySelector("#connection-dot");
+  const remoteHelp = stage.querySelector("#stage-remote-help");
+  const remoteCode = stage.querySelector("#stage-remote-code");
   let running = false;
   let speed = promptSettings.speed;
   let fontSize = promptSettings.fontSize;
@@ -554,16 +526,20 @@ function createTeleprompterStage(script, promptSettings) {
   sessionController = createStageSession();
   sessionController.on("ready", ({ code }) => {
     sessionLabel.innerHTML = `Remote code <strong>${code}</strong>`;
+    remoteCode.textContent = code;
     connectionDot.classList.add("ready");
   });
   sessionController.on("connected", () => {
     sessionLabel.textContent = "Laptop connected";
+    remoteHelp.classList.add("hidden");
     connectionDot.classList.add("connected");
     toast("Remote connected.", "success");
     syncRemote();
   });
   sessionController.on("disconnected", () => {
     sessionLabel.innerHTML = `Remote code <strong>${sessionController.code}</strong>`;
+    remoteCode.textContent = sessionController.code;
+    remoteHelp.classList.remove("hidden");
     connectionDot.classList.remove("connected");
   });
   sessionController.on("message", handleRemoteMessage);
@@ -642,16 +618,26 @@ function renderRemoteLanding() {
   app.innerHTML = shell(`
     <section class="remote-page">
       <div class="remote-page-copy">
-        <span class="section-kicker coral">Laptop remote</span>
-        <h1>Stay in your flow.</h1>
-        <p>Enter the six-character code shown on the phone. Your commands travel directly between the two devices.</p>
-        <div class="connection-form">
-          <label for="session-code">Session code</label>
-          <div class="code-entry">
-            <input id="session-code" maxlength="6" autocomplete="one-time-code" spellcheck="false" value="${escapeHtml(initialCode)}" placeholder="ABC123" />
-            <button class="button primary" id="connect-remote">Connect</button>
-          </div>
-          <small>Keep the teleprompter screen open on your phone.</small>
+        <span class="section-kicker coral">Phone + laptop</span>
+        <h1>Connect in two simple steps.</h1>
+        <p>The phone creates the code. The laptop enters it.</p>
+        <div class="remote-steps">
+          <section class="role-card phone-role">
+            <span class="step-number">1</span>
+            <div><span class="role-label">On your phone</span><h2>Show the connection code</h2><p>Open your script and start the teleprompter. A large six-character code will appear.</p></div>
+            <button class="button dark wide" id="start-phone-prompt">${icons.play}<span>Start phone teleprompter</span></button>
+          </section>
+          <section class="role-card laptop-role">
+            <span class="step-number">2</span>
+            <div><span class="role-label">On your laptop</span><h2>Enter the phone’s code</h2><p>Keep the teleprompter open on the phone, then type its code here.</p></div>
+            <div class="connection-form">
+              <label for="session-code">Code shown on phone</label>
+              <div class="code-entry">
+                <input id="session-code" maxlength="6" autocomplete="one-time-code" spellcheck="false" value="${escapeHtml(initialCode)}" placeholder="ABC123" />
+                <button class="button primary" id="connect-remote">Connect laptop</button>
+              </div>
+            </div>
+          </section>
         </div>
         <button class="text-button back-home" data-action="home">${icons.back} Back to scripts</button>
       </div>
@@ -664,6 +650,7 @@ function renderRemoteLanding() {
   `, "remote");
   bindGlobalActions();
   const codeInput = document.querySelector("#session-code");
+  document.querySelector("#start-phone-prompt").addEventListener("click", launchStage);
   codeInput.addEventListener("input", () => { codeInput.value = cleanSessionCode(codeInput.value); });
   codeInput.addEventListener("keydown", (event) => { if (event.key === "Enter") connectToStage(); });
   document.querySelector("#connect-remote").addEventListener("click", connectToStage);

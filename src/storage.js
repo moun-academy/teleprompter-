@@ -11,7 +11,7 @@ Look into the lens, and let the words come to you.
 
 Promptly keeps your script moving at your pace. You can pause from your laptop, move back a few lines, change the speed, or jump to the beginning without touching your phone.
 
-When you are ready, replace this sample with your own script, connect Google Drive, and start speaking with confidence.`,
+When you are ready, replace this sample with your own script. Choose a Word document from your phone, Google Drive, OneDrive, or laptop, and start speaking with confidence.`,
   source: "sample",
   updatedAt: Date.now()
 };
@@ -25,10 +25,7 @@ const defaultSettings = {
   mirrorX: false,
   mirrorY: false,
   cueLine: true,
-  theme: "black",
-  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || "",
-  googleApiKey: import.meta.env.VITE_GOOGLE_API_KEY || "",
-  googleAppId: import.meta.env.VITE_GOOGLE_APP_ID || ""
+  theme: "black"
 };
 
 function read(key, fallback) {
