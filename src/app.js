@@ -14,6 +14,7 @@ import { cleanSessionCode, connectRemote, createStageSession } from "./remote-li
 
 const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
+const APP_VERSION = "1.1.0";
 
 let activeScript = getActiveScript();
 let settings = getSettings();
@@ -402,6 +403,11 @@ function createTeleprompterStage(script, promptSettings) {
       <div class="stage-settings-panel" id="stage-settings-panel">
         <label class="stage-range speed-control"><span>Speed</span><input id="stage-speed" type="range" min="20" max="180" step="5" value="${promptSettings.speed}"/><output id="stage-speed-output">${promptSettings.speed}</output></label>
         <label class="stage-range size-control"><span>Text size</span><input id="stage-size" type="range" min="30" max="96" step="2" value="${promptSettings.fontSize}"/><output id="stage-size-output">${promptSettings.fontSize}</output></label>
+        <div class="stage-update">
+          <button class="stage-update-button" data-stage="check-update">${icons.reset}<span>Check for latest update</span></button>
+          <small id="stage-update-status" aria-live="polite">Current version ${APP_VERSION}</small>
+          <div class="stage-update-notes" id="stage-update-notes" hidden></div>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(stage);
@@ -411,6 +417,9 @@ function createTeleprompterStage(script, promptSettings) {
   const playButton = stage.querySelector(".stage-play");
   const stageControls = stage.querySelector(".stage-controls");
   const settingsToggle = stage.querySelector(".stage-settings-toggle");
+  const updateButton = stage.querySelector(".stage-update-button");
+  const updateStatus = stage.querySelector("#stage-update-status");
+  const updateNotes = stage.querySelector("#stage-update-notes");
   const status = stage.querySelector("#stage-status");
   const speedInput = stage.querySelector("#stage-speed");
   const sizeInput = stage.querySelector("#stage-size");
@@ -427,6 +436,7 @@ function createTeleprompterStage(script, promptSettings) {
   let wakeLock = null;
   let countdownRunning = false;
   let lastSync = 0;
+  let updateCheckRunning = false;
 
   const transforms = [];
   if (promptSettings.mirrorX) transforms.push("scaleX(-1)");
@@ -472,6 +482,63 @@ function createTeleprompterStage(script, promptSettings) {
   const setPhoneSettingsOpen = (open) => {
     stageControls.classList.toggle("settings-open", open);
     settingsToggle.setAttribute("aria-expanded", String(open));
+  };
+
+  const showReleaseNotes = (release) => {
+    const notes = Array.isArray(release.notes) ? release.notes.filter(Boolean) : [];
+    updateNotes.hidden = notes.length === 0;
+    updateNotes.innerHTML = notes.length ? `
+      <strong>${escapeHtml(release.title || "Latest update")}</strong>
+      <ul>${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
+    ` : "";
+  };
+
+  const checkForLatestUpdate = async () => {
+    if (updateCheckRunning) return;
+    updateCheckRunning = true;
+    updateButton.disabled = true;
+    updateStatus.textContent = "Checking for updates…";
+
+    try {
+      const response = await fetch(`/version.json?check=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Version check failed");
+      const release = await response.json();
+      showReleaseNotes(release);
+
+      if (!("serviceWorker" in navigator)) {
+        updateStatus.textContent = `Latest version ${release.version}. Refresh the browser to update.`;
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.getRegistration()
+        || await navigator.serviceWorker.register("/sw.js");
+
+      if (release.version === APP_VERSION) {
+        await registration.update();
+        updateStatus.textContent = `You’re up to date — Promptly ${APP_VERSION}`;
+        return;
+      }
+
+      updateStatus.textContent = `Installing Promptly ${release.version}…`;
+      const controllerChanged = new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 7000);
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          clearTimeout(timeout);
+          resolve(true);
+        }, { once: true });
+      });
+
+      await registration.update();
+      registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+      await controllerChanged;
+      updateStatus.textContent = `Promptly ${release.version} is ready. Reloading…`;
+      setTimeout(() => location.reload(), 350);
+    } catch {
+      updateStatus.textContent = "Couldn’t check. Confirm your internet connection and try again.";
+    } finally {
+      updateCheckRunning = false;
+      updateButton.disabled = false;
+    }
   };
 
   const setRunning = (value) => {
@@ -615,6 +682,7 @@ function createTeleprompterStage(script, promptSettings) {
     if (action === "forward") moveBy(5);
     if (action === "reset") reset();
     if (action === "settings" && !running) setPhoneSettingsOpen(!stageControls.classList.contains("settings-open"));
+    if (action === "check-update") checkForLatestUpdate();
   }));
   speedInput.addEventListener("input", () => applyPatch({ speed: Number(speedInput.value) }));
   sizeInput.addEventListener("input", () => applyPatch({ fontSize: Number(sizeInput.value) }));

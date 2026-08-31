@@ -1,0 +1,10 @@
+{
+  "version": "1.1.0",
+  "releasedAt": "2026-08-31",
+  "title": "Mobile reading controls",
+  "notes": [
+    "Mobile settings and the gear now disappear completely while the script is rolling.",
+    "Pausing brings the gear back without reopening or covering the script.",
+    "The settings panel can now check for and install future Promptly updates."
+  ]
+}

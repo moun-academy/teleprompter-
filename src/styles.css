@@ -184,6 +184,7 @@ input[type="range"]::-moz-range-thumb { width: 11px; height: 11px; border: 3px s
 .stage-settings-toggle { display: none; }
 .stage-settings-toggle:disabled { opacity: .35; }
 .stage-settings-panel { display: contents; }
+.stage-update { display: none; }
 .stage-range { width: min(160px, 18vw); display: grid; grid-template-columns: auto 1fr 28px; align-items: center; gap: 8px; color: #989da5; font-size: 9px; }
 .stage-range output { text-align: right; }
 .stage-range input { height: 3px; }
@@ -301,17 +302,26 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .stage-remote-help span { font-size: 9px; }
   .stage-remote-help strong { font-size: 16px; }
   .stage-controls { min-height: 72px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: 52px 58px 52px 52px; grid-template-areas: "back play forward settings"; gap: 10px; }
-  .is-running .stage-controls { transform: none; opacity: 1; }
+  .is-running .stage-controls { grid-template-columns: 52px 58px 52px; grid-template-areas: "back play forward"; transform: none; opacity: 1; }
   .stage-control[data-stage="rewind"] { grid-area: back; }
   .stage-play { grid-area: play; }
   .stage-control[data-stage="forward"] { grid-area: forward; }
   .stage-settings-toggle { grid-area: settings; display: grid; }
+  .is-running .stage-settings-toggle { display: none; }
   .stage-settings-panel { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); padding: 14px; display: none; gap: 13px; border: 1px solid rgba(255,255,255,.1); border-radius: 15px; background: var(--stage-ui); box-shadow: 0 16px 38px rgba(0,0,0,.28); backdrop-filter: blur(14px); }
   .stage-controls.settings-open .stage-settings-panel { display: grid; }
   .is-running .stage-settings-panel { display: none; }
   .stage-range { width: 100%; display: grid; grid-template-columns: 52px minmax(120px, 1fr) 32px; gap: 9px; font-size: 10px; }
   .stage-range input { height: 5px; }
   .stage-range output { color: #f4f1ea; font-size: 10px; }
+  .stage-update { padding-top: 12px; display: grid; gap: 7px; border-top: 1px solid rgba(255,255,255,.1); }
+  .stage-update-button { min-height: 40px; padding: 0 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; color: inherit; background: rgba(255,255,255,.07); font: inherit; font-size: 10px; font-weight: 600; }
+  .stage-update-button svg { width: 17px; height: 17px; }
+  .stage-update-button:disabled { opacity: .55; }
+  .stage-update small { color: #999fa7; text-align: center; font-size: 9px; }
+  .stage-update-notes { padding: 9px 10px; border-radius: 9px; color: #b8bdc4; background: rgba(255,255,255,.05); font-size: 9px; line-height: 1.45; }
+  .stage-update-notes strong { color: inherit; }
+  .stage-update-notes ul { margin: 5px 0 0; padding-left: 15px; }
   .stage-play { width: 50px; height: 50px; }
   .prompt-copy { max-width: 92% !important; }
   .remote-page { min-height: calc(100vh - 130px); display: block; }
