@@ -1,11 +1,10 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "releasedAt": "2026-10-17",
-  "title": "Reliable remote recovery",
+  "title": "Simple mirroring, correct reading order",
   "notes": [
-    "Remote reconnects after a network interruption or returning to the app.",
-    "Service outages are explained clearly, with a retry button on the phone.",
-    "Laptop controls wait for the phone to reconnect and receive its latest state.",
-    "Daily database health checks help reduce inactivity pauses."
+    "One simple mirror switch flips the text left to right for teleprompter glass.",
+    "Old vertical-flip settings are corrected automatically, keeping the first paragraph first.",
+    "New sessions and replay after the end start at the beginning; pause and resume keep your place."
   ]
 }

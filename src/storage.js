@@ -23,7 +23,6 @@ const defaultSettings = {
   textWidth: 78,
   countdown: 3,
   mirrorX: false,
-  mirrorY: false,
   cueLine: true,
   theme: "black"
 };
@@ -74,11 +73,24 @@ export function setActiveScript(id) {
 }
 
 export function getSettings() {
-  return { ...defaultSettings, ...read(SETTINGS_KEY, {}) };
+  const stored = read(SETTINGS_KEY, {});
+  const previous = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+  const { mirrorY, ...saved } = previous;
+  const settings = {
+    ...defaultSettings,
+    ...saved,
+    // Older vertical mirroring reversed the paragraph order. Migrate any old
+    // mirror preference to the single left/right flip used by prompter glass.
+    mirrorX: Boolean(saved.mirrorX || mirrorY),
+    speed: Number.isFinite(saved.speed) ? Math.max(20, Math.min(180, saved.speed)) : defaultSettings.speed
+  };
+  if (Object.hasOwn(previous, "mirrorY")) write(SETTINGS_KEY, settings);
+  return settings;
 }
 
 export function saveSettings(settings) {
-  return write(SETTINGS_KEY, { ...getSettings(), ...settings });
+  const { mirrorY, ...patch } = settings;
+  return write(SETTINGS_KEY, { ...getSettings(), ...patch });
 }
 
 export function makeId(prefix = "script") {

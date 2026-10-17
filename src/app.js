@@ -14,7 +14,7 @@ import { cleanSessionCode, connectRemote, createStageSession } from "./remote-li
 
 const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 
 let activeScript = getActiveScript();
 let settings = getSettings();
@@ -158,7 +158,7 @@ function renderWorkspace() {
           <div class="panel-heading compact"><div><span class="section-kicker">Prompt settings</span><h3>Fine tune</h3></div></div>
           ${rangeField("speed", "Scroll speed", settings.speed, 20, 180, 5, `${settings.speed} px/s`)}
           ${rangeField("fontSize", "Text size", settings.fontSize, 30, 96, 2, `${settings.fontSize} px`)}
-          <label class="toggle-row"><span><strong>Mirror text</strong><small>For beam-splitter glass</small></span><input type="checkbox" id="mirror-toggle" ${settings.mirrorX ? "checked" : ""}/><span class="toggle"></span></label>
+          <label class="toggle-row"><span><strong>Mirror for teleprompter</strong><small>Flip left to right for the glass</small></span><input type="checkbox" id="mirror-toggle" ${settings.mirrorX ? "checked" : ""}/><span class="toggle"></span></label>
         </div>
       </aside>
     </section>
@@ -322,8 +322,7 @@ function openPromptSettings() {
       ${rangeField("modal-line", "Line spacing", settings.lineHeight, 1.2, 2, 0.05, settings.lineHeight)}
       <label class="select-field"><span>Countdown</span><select id="modal-countdown"><option value="0">None</option><option value="3">3 seconds</option><option value="5">5 seconds</option><option value="10">10 seconds</option></select></label>
       <label class="select-field"><span>Screen theme</span><select id="modal-theme"><option value="black">Black</option><option value="warm">Warm paper</option><option value="contrast">High contrast</option></select></label>
-      <label class="toggle-row"><span><strong>Horizontal mirror</strong><small>For teleprompter glass</small></span><input id="modal-mirror-x" type="checkbox" ${settings.mirrorX ? "checked" : ""}/><span class="toggle"></span></label>
-      <label class="toggle-row"><span><strong>Vertical mirror</strong><small>For unusual rigs</small></span><input id="modal-mirror-y" type="checkbox" ${settings.mirrorY ? "checked" : ""}/><span class="toggle"></span></label>
+      <label class="toggle-row"><span><strong>Mirror for teleprompter</strong><small>Flip left to right for the glass</small></span><input id="modal-mirror" type="checkbox" ${settings.mirrorX ? "checked" : ""}/><span class="toggle"></span></label>
       <label class="toggle-row"><span><strong>Reading guide</strong><small>Keep your eyes near the lens</small></span><input id="modal-cue" type="checkbox" ${settings.cueLine ? "checked" : ""}/><span class="toggle"></span></label>
     </div>
     <div class="modal-footer"><button class="button ghost" data-close-modal>Cancel</button><button class="button primary" id="save-prompt-settings">Save settings</button></div>
@@ -343,8 +342,7 @@ function openPromptSettings() {
       lineHeight: Number(wrap.querySelector("#modal-line-range").value),
       countdown: Number(wrap.querySelector("#modal-countdown").value),
       theme: wrap.querySelector("#modal-theme").value,
-      mirrorX: wrap.querySelector("#modal-mirror-x").checked,
-      mirrorY: wrap.querySelector("#modal-mirror-y").checked,
+      mirrorX: wrap.querySelector("#modal-mirror").checked,
       cueLine: wrap.querySelector("#modal-cue").checked
     });
     wrap.remove();
@@ -449,13 +447,11 @@ function createTeleprompterStage(script, promptSettings) {
   let updateCheckRunning = false;
   const useAppExpandedView = window.matchMedia("(max-width: 800px), (pointer: coarse)").matches;
 
-  const transforms = [];
-  if (promptSettings.mirrorX) transforms.push("scaleX(-1)");
-  if (promptSettings.mirrorY) transforms.push("scaleY(-1)");
-  copy.style.transform = transforms.join(" ") || "none";
+  copy.style.transform = promptSettings.mirrorX ? "scaleX(-1)" : "none";
   copy.style.fontSize = `${fontSize}px`;
   copy.style.lineHeight = String(promptSettings.lineHeight);
   copy.style.maxWidth = `${promptSettings.textWidth}%`;
+  viewport.scrollTop = 0;
 
   const stateSnapshot = () => {
     const max = Math.max(1, viewport.scrollHeight - viewport.clientHeight);
@@ -474,7 +470,7 @@ function createTeleprompterStage(script, promptSettings) {
   const frame = (time) => {
     if (destroyed) return;
     if (running) {
-      if (previousTime) viewport.scrollTop += speed * ((time - previousTime) / 1000);
+      if (previousTime) viewport.scrollTop += speed * Math.min(0.1, Math.max(0, (time - previousTime) / 1000));
       const maxScroll = viewport.scrollHeight - viewport.clientHeight;
       if (viewport.scrollTop >= maxScroll - 2) setRunning(false);
       if (time - lastSync > 300) {
@@ -553,6 +549,11 @@ function createTeleprompterStage(script, promptSettings) {
   };
 
   const setRunning = (value) => {
+    if (value && !running) {
+      const end = viewport.scrollHeight - viewport.clientHeight;
+      if (end > 0 && viewport.scrollTop >= end - 2) viewport.scrollTop = 0;
+      previousTime = 0;
+    }
     running = value;
     if (running) setPhoneSettingsOpen(false);
     settingsToggle.disabled = running;
@@ -583,7 +584,8 @@ function createTeleprompterStage(script, promptSettings) {
 
   const reset = () => {
     setRunning(false);
-    viewport.scrollTo({ top: 0, behavior: "smooth" });
+    viewport.scrollTop = 0;
+    previousTime = 0;
     syncRemote();
   };
 

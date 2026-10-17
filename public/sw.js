@@ -1,4 +1,4 @@
-const CACHE_NAME = "promptly-v10";
+const CACHE_NAME = "promptly-v11";
 const APP_SHELL = [
   "/",
   "/index.html",

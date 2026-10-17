@@ -5,7 +5,7 @@ Promptly is an installable, offline-ready teleprompter PWA. The phone runs the p
 ## Included
 
 - Smooth, frame-timed scrolling with adjustable speed, text size, line spacing, and width
-- Horizontal and vertical mirror modes for beam-splitter glass
+- One simple left/right mirror switch for teleprompter glass; reading order always stays first-to-last
 - Laptop remote for play/pause, 5-second moves, restart, position, speed, and font size
 - Simple Word (`.docx`), text, and Markdown import from Google Drive, OneDrive, or local storage
 - Local script library, auto-save, countdown, fullscreen, and screen wake lock
