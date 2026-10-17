@@ -438,7 +438,7 @@
           onHostCommand(m);
         }
       }, (ok) => {
-        if (!hostConn) updateHostStatus(ok ? 'Host online' : 'Reconnecting...', ok);
+        if (!hostConn) updateHostStatus(ok ? 'Host online' : 'Cannot reach relay (ntfy.sh) - check internet', ok);
       });
     }
 
@@ -492,6 +492,7 @@
           onRemoteState(m);
         }
       }, (ok) => {
+        if (!ok && !done) setJoinStatus('Cannot reach the relay (ntfy.sh). Check internet / disable ad-blocker or VPN.', 'err');
         if (ok && !helloTimer && !done) {
           setJoinStatus('Finding teleprompter...');
           const hello = () => relaySend(cTopic, { action: 'hello' });
