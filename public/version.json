@@ -1,10 +1,11 @@
 {
-  "version": "1.1.1",
-  "releasedAt": "2026-08-31",
-  "title": "Distraction-free prompting",
+  "version": "1.2.0",
+  "releasedAt": "2026-10-17",
+  "title": "Reliable remote recovery",
   "notes": [
-    "Only the script remains visible on mobile while the text is rolling.",
-    "Pausing restores the controls and settings.",
-    "The mobile expand button now uses an in-app view without triggering the browser fullscreen notice."
+    "Remote reconnects after a network interruption or returning to the app.",
+    "Service outages are explained clearly, with a retry button on the phone.",
+    "Laptop controls wait for the phone to reconnect and receive its latest state.",
+    "Daily database health checks help reduce inactivity pauses."
   ]
 }

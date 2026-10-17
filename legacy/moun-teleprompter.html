@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>MOUN Teleprompter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070b14;
+      --panel: rgba(18, 24, 40, 0.82);
+      --panel-2: rgba(16, 21, 34, 0.95);
+      --text: #e7edf8;
+      --muted: #9aa8c7;
+      --brand: #4f8cff;
+      --brand-2: #65d3ff;
+      --ok: #22c55e;
+      --err: #ef4444;
+      --border: rgba(129, 154, 207, 0.25);
+      --glow: 0 20px 50px rgba(79, 140, 255, 0.26);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% -20%, rgba(101, 211, 255, 0.28), transparent 45%),
+        radial-gradient(circle at 100% 0%, rgba(79, 140, 255, 0.3), transparent 43%),
+        radial-gradient(circle at 80% 120%, rgba(137, 90, 255, 0.18), transparent 42%),
+        var(--bg);
+      min-height: 100dvh;
+      overflow: hidden;
+    }
+
+    .screen { display: none; height: 100dvh; }
+    .screen.active { display: flex; }
+
+    .shell {
+      width: min(960px, 96vw);
+      margin: auto;
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      box-shadow: var(--glow);
+      border-radius: 24px;
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .brand { font-weight: 800; letter-spacing: .12em; font-size: 13px; color: var(--brand-2); text-transform: uppercase; }
+    .title { font-size: clamp(24px, 5vw, 38px); font-weight: 800; line-height: 1.15; }
+    .subtitle { color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .btn {
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(45,57,91,.75), rgba(23,29,47,.9));
+      color: var(--text);
+      padding: 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: .22s ease;
+    }
+    .btn:hover, .btn:active { transform: translateY(-2px); border-color: rgba(101,211,255,.7); box-shadow: 0 8px 30px rgba(101,211,255,.2); }
+    .btn.primary {
+      background: linear-gradient(135deg, var(--brand), #6f71ff);
+      border-color: transparent;
+      color: white;
+    }
+
+    .row { display: flex; align-items: center; gap: 10px; }
+    .space { justify-content: space-between; }
+
+    .field, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 15px;
+      outline: none;
+    }
+    textarea { min-height: 230px; resize: vertical; line-height: 1.6; }
+    .field:focus, textarea:focus { border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(101,211,255,.2); }
+
+    .stat {
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+    }
+
+    .code {
+      font-size: 30px;
+      letter-spacing: .25em;
+      color: var(--brand-2);
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 700;
+    }
+
+    .status-dot { width: 10px; height: 10px; border-radius: 999px; background: #64748b; }
+    .status-dot.on { background: var(--ok); box-shadow: 0 0 12px rgba(34,197,94,.8); }
+
+    .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .setting {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-2);
+      padding: 10px;
+    }
+    .setting label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 8px; }
+    .setting input[type='range'] { width: 100%; }
+
+    .join-wrap { display: flex; gap: 8px; justify-content: center; }
+    .digit {
+      width: 56px;
+      height: 64px;
+      text-align: center;
+      font-size: 30px;
+      font-family: "JetBrains Mono", monospace;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      color: var(--brand-2);
+      background: var(--panel-2);
+    }
+
+    .status { min-height: 22px; text-align: center; color: var(--muted); font-size: 14px; }
+    .status.err { color: var(--err); }
+    .status.ok { color: var(--ok); }
+
+    /* Prompter */
+    #prompterScreen { position: relative; background: #04070e; }
+    .prompter-top {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 30;
+      padding: 14px 18px;
+      display: flex; justify-content: space-between; align-items: center;
+      background: linear-gradient(to bottom, rgba(4,7,14,.95), transparent);
+    }
+
+    .prompter-wrap { position: absolute; inset: 0; overflow: hidden; }
+    #prompterText {
+      padding: 44vh 24px 52vh;
+      font-size: 36px;
+      line-height: 1.58;
+      will-change: transform;
+    }
+    #prompterText .paragraph { margin-bottom: 1.1em; }
+
+    .reading-zone {
+      pointer-events: none;
+      position: absolute; left: 18px; right: 18px; top: 34%; height: 18%;
+      border-top: 1px solid rgba(101,211,255,.4);
+      border-bottom: 1px solid rgba(101,211,255,.4);
+      z-index: 10;
+    }
+
+    .fade-top, .fade-bottom { pointer-events: none; position: absolute; left: 0; right: 0; z-index: 8; }
+    .fade-top { top: 0; height: 35%; background: linear-gradient(to bottom, rgba(4,7,14,.98), rgba(4,7,14,.35), transparent); }
+    .fade-bottom { bottom: 0; height: 44%; background: linear-gradient(to top, rgba(4,7,14,.98), rgba(4,7,14,.45), transparent); }
+
+    .progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 0%; background: linear-gradient(90deg, var(--brand), var(--brand-2)); z-index: 25; }
+
+    .prompter-controls {
+      position: absolute; z-index: 35; left: 0; right: 0; bottom: 0;
+      padding: 16px;
+      display: flex; justify-content: center; gap: 12px;
+      background: linear-gradient(to top, rgba(4,7,14,.94), transparent);
+      flex-wrap: wrap;
+    }
+
+    .chip { border: 1px solid var(--border); background: rgba(14,20,35,.85); color: var(--text); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+    .play-big { background: linear-gradient(135deg,var(--brand),#6f71ff); border-color: transparent; color: white; }
+
+    .touch-nav { position: absolute; inset: 0; display: flex; z-index: 20; }
+    .touch-nav button { flex: 1; border: none; background: transparent; }
+
+    .remote-body { display: grid; gap: 14px; justify-items: center; text-align: center; }
+    .remote-play {
+      width: 116px; height: 116px; border-radius: 999px; border: none; cursor: pointer;
+      background: linear-gradient(135deg,var(--brand),#6f71ff); color: white; font-size: 46px;
+      box-shadow: var(--glow);
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 12px;
+      color: rgba(220,232,255,.68);
+      font-family: "JetBrains Mono", monospace;
+      pointer-events: none;
+    }
+
+    .hint {
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      border: 1px solid rgba(101,211,255,.7);
+      background: rgba(8,18,34,.85);
+      color: var(--brand-2);
+      padding: 10px 14px;
+      border-radius: 10px;
+      opacity: 0;
+      transition: .25s;
+      z-index: 100;
+    }
+    .hint.show { opacity: 1; }
+
+    @media (max-width: 800px) {
+      .grid-2, .settings { grid-template-columns: 1fr; }
+      #prompterText { font-size: 28px; padding: 42vh 16px 56vh; }
+      .shell { border-radius: 18px; padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="screen active" id="homeScreen">
+    <div class="shell">
+      <div class="brand">MOUN Teleprompter</div>
+      <div class="title">Studio teleprompter with live mobile remote</div>
+      <div class="subtitle">Run the teleprompter on one device and control it from your phone with play, speed, font-size, and paragraph jump.</div>
+      <div class="grid-2">
+        <button class="btn primary" onclick="goTo('setup')">🎬 Start Teleprompter</button>
+        <button class="btn" onclick="goTo('join')">📱 Use Phone as Remote</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen" id="setupScreen">
+    <div class="shell">
+      <div class="row space">
+        <div class="brand">Host</div>
+        <button class="btn" onclick="goTo('home')">← Back</button>
+      </div>
+
+      <div class="row space stat">
+        <div>
+          Room code: <span id="roomCode" class="code">····</span>
+        </div>
+        <div class="row"><div class="status-dot" id="hostDot"></div><span id="hostState">Waiting remote</span></div>
+      </div>
+
+      <textarea id="scriptInput" placeholder="Paste your script here...\n\nTip: separate paragraphs with blank lines for paragraph jump controls."></textarea>
+
+      <div class="settings">
+        <div class="setting">
+          <label>Speed: <span id="speedLabel">3.0x</span></label>
+          <input type="range" id="speedInput" min="0.5" max="10" step="0.5" value="3" />
+        </div>
+        <div class="setting">
+          <label>Font size: <span id="fontLabel">36px</span></label>
+          <input type="range" id="fontInput" min="18" max="84" step="2" value="36" />
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <button class="btn" id="mirrorBtn" onclick="toggleMirror()">Mirror: OFF</button>
+        <button class="btn primary" onclick="startPrompter()">▶ Start with Countdown</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen" id="joinScreen">
+    <div class="shell" style="max-width: 540px;">
+      <div class="row space">
+        <div class="brand">Remote Join</div>
+        <button class="btn" onclick="goTo('home')">← Back</button>
+      </div>
+      <div class="title" style="font-size:28px;">Enter host room code</div>
+      <div class="join-wrap">
+        <input class="digit" type="tel" maxlength="1" id="d0" inputmode="numeric" />
+        <input class="digit" type="tel" maxlength="1" id="d1" inputmode="numeric" />
+        <input class="digit" type="tel" maxlength="1" id="d2" inputmode="numeric" />
+        <input class="digit" type="tel" maxlength="1" id="d3" inputmode="numeric" />
+      </div>
+      <button class="btn primary" onclick="joinRoom()">Connect to Host</button>
+      <div class="status" id="joinStatus"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="remoteScreen">
+    <div class="shell" style="max-width: 620px;">
+      <div class="row space">
+        <div class="brand">Remote Connected</div>
+        <button class="btn" onclick="disconnectRemote()">Disconnect</button>
+      </div>
+
+      <div class="remote-body">
+        <div class="subtitle">Control the teleprompter from your phone</div>
+        <button class="remote-play" id="remotePlay" onclick="remoteToggle()">▶</button>
+
+        <div class="row" style="gap:12px;">
+          <button class="btn" onclick="remoteSpeed(-0.5)">− Speed</button>
+          <div class="stat" id="remoteSpeedLabel">3.0x</div>
+          <button class="btn" onclick="remoteSpeed(0.5)">+ Speed</button>
+        </div>
+
+        <div class="grid-2" style="width:100%;">
+          <button class="btn" onclick="remoteCmd('fontDown')">A− Font</button>
+          <button class="btn" onclick="remoteCmd('fontUp')">A+ Font</button>
+          <button class="btn" onclick="remoteCmd('prevPara')">⬅ Prev Paragraph</button>
+          <button class="btn" onclick="remoteCmd('nextPara')">Next Paragraph ➡</button>
+          <button class="btn" onclick="remoteCmd('reset')">⏮ Reset</button>
+          <button class="btn" onclick="remoteCmd('exit')">⏹ Stop</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen" id="prompterScreen">
+    <div class="prompter-top">
+      <button class="chip" onclick="exitPrompter()">✕ Exit</button>
+      <div class="row stat">
+        <div class="status-dot" id="playDot"></div>
+        <span id="topInfo">3.0x · Room ----</span>
+      </div>
+      <button class="chip" onclick="showControlsNow()">☰ Controls</button>
+    </div>
+
+    <div class="fade-top"></div>
+    <div class="reading-zone"></div>
+    <div class="fade-bottom"></div>
+
+    <div class="prompter-wrap">
+      <div id="prompterText"></div>
+    </div>
+
+    <div class="touch-nav" id="touchNav">
+      <button type="button" data-dir="prev" aria-label="Previous paragraph"></button>
+      <button type="button" data-dir="next" aria-label="Next paragraph"></button>
+    </div>
+
+    <div class="progress" id="progressBar"></div>
+
+    <div class="prompter-controls" id="prompterControls">
+      <button class="chip" onclick="resetScroll()">⏮</button>
+      <button class="chip" onclick="changeSpeed(-0.5)">− Speed</button>
+      <button class="chip play-big" id="playPauseBtn" onclick="togglePlay()">▶</button>
+      <button class="chip" onclick="changeSpeed(0.5)">+ Speed</button>
+      <button class="chip" onclick="changeFont(-2)">A−</button>
+      <button class="chip" onclick="changeFont(2)">A+</button>
+      <button class="chip" onclick="goToPrevParagraph()">⬅</button>
+      <button class="chip" onclick="goToNextParagraph()">➡</button>
+    </div>
+  </div>
+
+  <div class="hint" id="hint"></div>
+  <div class="footer" id="versionFooter"></div>
+
+  <script>
+    const VERSION = 'v3.0.0';
+
+    let playing = false;
+    let speed = 3;
+    let fontSize = 36;
+    let mirrored = false;
+    let scrollY = 0;
+    let lastTs = null;
+
+    let isHost = false;
+    let roomCode = '';
+    let hostPeer = null;
+    let remotePeer = null;
+    let hostConn = null;   // host side connection to remote
+    let remoteConn = null; // remote side connection to host
+
+    let paraPositions = [];
+    let ctrlHideTimer = null;
+
+    // Transport: ntfy.sh public pub/sub relay over HTTPS (works on any network, no WebRTC/NAT/TURN).
+    // Two topics per room: -c (remote -> prompter) and -s (prompter -> remote).
+    const RELAY = 'https://ntfy.sh/';
+    const topicOf = (code, dir) => `moun-tp-${code}-${dir}`;
+
+    function relaySend(topic, msg) {
+      return fetch(RELAY + topic, { method: 'POST', body: JSON.stringify(msg) })
+        .catch(e => console.warn('send failed', e));
+    }
+
+    function relaySubscribe(topic, onMsg, onState) {
+      const es = new EventSource(`${RELAY}${topic}/sse`);
+      es.onopen = () => onState && onState(true);
+      es.onerror = () => onState && onState(false); // EventSource auto-reconnects
+      es.addEventListener('message', (ev) => {
+        try { onMsg(JSON.parse(JSON.parse(ev.data).message)); } catch (_) {}
+      });
+      return es;
+    }
+
+    function byId(id) { return document.getElementById(id); }
+
+    function setVersionFooter() {
+      const dt = new Date();
+      byId('versionFooter').textContent = `${VERSION} • ${dt.toLocaleString()}`;
+    }
+
+    function goTo(screen) {
+      ['home','setup','join','remote','prompter'].forEach(s => byId(`${s}Screen`)?.classList.remove('active'));
+      byId(`${screen}Screen`).classList.add('active');
+      if (screen === 'setup' && !hostPeer) initHost();
+      if (screen === 'join') setupJoinDigits();
+    }
+
+    function genRoomCode() {
+      return String(Math.floor(1000 + Math.random() * 9000));
+    }
+
+    function updateHostStatus(text, on = false) {
+      byId('hostState').textContent = text;
+      byId('hostDot').classList.toggle('on', on);
+    }
+
+    function initHost() {
+      isHost = true;
+      roomCode = genRoomCode();
+      byId('roomCode').textContent = roomCode;
+      updateHostStatus('Starting host...', false);
+      if (hostPeer) hostPeer.close();
+
+      const sTopic = topicOf(roomCode, 's');
+      hostPeer = relaySubscribe(topicOf(roomCode, 'c'), (m) => {
+        if (!m) return;
+        if (m.action === 'hello') {
+          hostConn = { open: true, send: (x) => relaySend(sTopic, x) };
+          hostConn.send({ type: 'ack' });
+          updateHostStatus('Remote connected', true);
+          sendStateToRemote();
+        } else {
+          onHostCommand(m);
+        }
+      }, (ok) => {
+        if (!hostConn) updateHostStatus(ok ? 'Host online' : 'Cannot reach relay (ntfy.sh) - check internet', ok);
+      });
+    }
+
+    function setupJoinDigits() {
+      const ds = [0,1,2,3].map(i => byId(`d${i}`));
+      ds.forEach((d, i) => {
+        d.value = '';
+        d.oninput = () => {
+          d.value = d.value.replace(/\D/g, '').slice(0,1);
+          if (d.value && i < ds.length - 1) ds[i + 1].focus();
+        };
+        d.onkeydown = (e) => {
+          if (e.key === 'Backspace' && !d.value && i > 0) ds[i - 1].focus();
+        };
+      });
+      setTimeout(() => ds[0].focus(), 180);
+    }
+
+    function setJoinStatus(text, cls = '') {
+      const el = byId('joinStatus');
+      el.textContent = text;
+      el.className = `status ${cls}`;
+    }
+
+    let helloTimer = null, joinTimer = null;
+
+    function joinRoom() {
+      const code = [0,1,2,3].map(i => byId(`d${i}`).value).join('');
+      if (!/^\d{4}$/.test(code)) {
+        setJoinStatus('Please enter a valid 4-digit code.', 'err');
+        return;
+      }
+
+      if (remotePeer) remotePeer.close();
+      clearTimeout(joinTimer); clearInterval(helloTimer); helloTimer = null;
+      setJoinStatus('Connecting to host...');
+
+      const cTopic = topicOf(code, 'c');
+      let done = false;
+
+      // Subscribe first so the reply can't be missed, then say hello until acknowledged.
+      remotePeer = relaySubscribe(topicOf(code, 's'), (m) => {
+        if (!m) return;
+        if (m.type === 'ack' && !done) {
+          done = true;
+          clearTimeout(joinTimer); clearInterval(helloTimer);
+          remoteConn = { open: true, send: (x) => relaySend(cTopic, x), close: () => {} };
+          setJoinStatus('Connected!', 'ok');
+          goTo('remote');
+        } else {
+          onRemoteState(m);
+        }
+      }, (ok) => {
+        if (!ok && !done) setJoinStatus('Cannot reach the relay (ntfy.sh). Check internet / disable ad-blocker or VPN.', 'err');
+        if (ok && !helloTimer && !done) {
+          setJoinStatus('Finding teleprompter...');
+          const hello = () => relaySend(cTopic, { action: 'hello' });
+          hello();
+          helloTimer = setInterval(hello, 2000);
+        }
+      });
+
+      joinTimer = setTimeout(() => {
+        if (done) return;
+        clearInterval(helloTimer); helloTimer = null;
+        remotePeer.close(); remotePeer = null;
+        setJoinStatus('Teleprompter not found. Check the code, and that both devices are online.', 'err');
+      }, 15000);
+    }
+
+    function disconnectRemote() {
+      clearTimeout(joinTimer); clearInterval(helloTimer); helloTimer = null;
+      if (remotePeer) { remotePeer.close(); remotePeer = null; }
+      remoteConn = null;
+      goTo('join');
+    }
+
+    function sendStateToRemote() {
+      if (hostConn && hostConn.open) {
+        hostConn.send({
+          type: 'state',
+          playing,
+          speed,
+          fontSize,
+          scrollY
+        });
+      }
+    }
+
+    function onRemoteState(msg) {
+      if (!msg || msg.type !== 'state') return;
+      byId('remotePlay').textContent = msg.playing ? '⏸' : '▶';
+      byId('remoteSpeedLabel').textContent = `${msg.speed.toFixed(1)}x`;
+    }
+
+    function onHostCommand(msg) {
+      if (!msg || !msg.action) return;
+      switch (msg.action) {
+        case 'toggle': togglePlay(); break;
+        case 'speedUp': changeSpeed(0.5); break;
+        case 'speedDown': changeSpeed(-0.5); break;
+        case 'fontUp': changeFont(2); break;
+        case 'fontDown': changeFont(-2); break;
+        case 'reset': resetScroll(); break;
+        case 'exit': exitPrompter(); break;
+        case 'nextPara': goToNextParagraph(); break;
+        case 'prevPara': goToPrevParagraph(); break;
+      }
+    }
+
+    function remoteSend(action) {
+      if (!remoteConn || !remoteConn.open) return;
+      remoteConn.send({ action });
+    }
+
+    function remoteToggle() {
+      remoteSend('toggle');
+      const el = byId('remotePlay');
+      el.textContent = el.textContent === '▶' ? '⏸' : '▶';
+    }
+
+    function remoteSpeed(delta) {
+      remoteSend(delta > 0 ? 'speedUp' : 'speedDown');
+      const el = byId('remoteSpeedLabel');
+      let v = parseFloat(el.textContent);
+      if (Number.isNaN(v)) v = speed;
+      v = Math.max(0.5, Math.min(10, v + delta));
+      el.textContent = `${v.toFixed(1)}x`;
+    }
+
+    function remoteCmd(action) { remoteSend(action); }
+
+    function toggleMirror() {
+      mirrored = !mirrored;
+      byId('mirrorBtn').textContent = `Mirror: ${mirrored ? 'ON' : 'OFF'}`;
+      syncTextTransform();
+    }
+
+    function maxScroll(el) {
+      return Math.max(0, el.scrollHeight - window.innerHeight * 0.4);
+    }
+
+    function syncTextTransform() {
+      const el = byId('prompterText');
+      if (!el) return;
+      el.style.transform = mirrored
+        ? `scaleX(-1) translateY(-${scrollY}px)`
+        : `translateY(-${scrollY}px)`;
+    }
+
+    function syncProgress() {
+      const el = byId('prompterText');
+      const max = maxScroll(el);
+      const pct = max <= 0 ? 100 : Math.min(100, (scrollY / max) * 100);
+      byId('progressBar').style.width = `${pct}%`;
+    }
+
+    function buildParagraphPositions() {
+      const paragraphs = [...byId('prompterText').querySelectorAll('.paragraph')];
+      paraPositions = paragraphs.map(p => p.offsetTop).sort((a, b) => a - b);
+      if (!paraPositions.length || paraPositions[0] !== 0) paraPositions.unshift(0);
+    }
+
+    function showHint(text) {
+      const h = byId('hint');
+      h.textContent = text;
+      h.classList.add('show');
+      setTimeout(() => h.classList.remove('show'), 900);
+    }
+
+    function goToPrevParagraph() {
+      if (!paraPositions.length) return;
+      let target = 0;
+      for (let i = paraPositions.length - 1; i >= 0; i--) {
+        if (paraPositions[i] < scrollY - 30) {
+          target = paraPositions[i];
+          break;
+        }
+      }
+      scrollY = Math.max(0, target);
+      syncTextTransform();
+      syncProgress();
+      showHint('↑ Previous paragraph');
+      sendStateToRemote();
+    }
+
+    function goToNextParagraph() {
+      if (!paraPositions.length) return;
+      const el = byId('prompterText');
+      const max = maxScroll(el);
+      let target = max;
+      for (let i = 0; i < paraPositions.length; i++) {
+        if (paraPositions[i] > scrollY + 30) {
+          target = paraPositions[i];
+          break;
+        }
+      }
+      scrollY = Math.max(0, Math.min(target, max));
+      syncTextTransform();
+      syncProgress();
+      showHint('↓ Next paragraph');
+      sendStateToRemote();
+    }
+
+    function updateUI() {
+      byId('playPauseBtn').textContent = playing ? '⏸' : '▶';
+      byId('playDot').classList.toggle('on', playing);
+      byId('topInfo').textContent = `${speed.toFixed(1)}x · Room ${roomCode || '----'}`;
+      byId('speedLabel').textContent = `${speed.toFixed(1)}x`;
+      byId('fontLabel').textContent = `${fontSize}px`;
+    }
+
+    function showControlsNow() {
+      const ctrls = byId('prompterControls');
+      ctrls.style.opacity = '1';
+      ctrls.style.pointerEvents = 'auto';
+      clearTimeout(ctrlHideTimer);
+      ctrlHideTimer = setTimeout(() => {
+        if (playing) {
+          ctrls.style.opacity = '0';
+          ctrls.style.pointerEvents = 'none';
+        }
+      }, 2600);
+    }
+
+    function renderScript() {
+      const raw = byId('scriptInput').value.trim();
+      if (!raw) {
+        byId('scriptInput').focus();
+        return false;
+      }
+      const paras = raw.split(/\n\s*\n/g).map(s => s.trim()).filter(Boolean);
+      byId('prompterText').innerHTML = paras.map(p => `<div class="paragraph">${p.replace(/\n/g, '<br>')}</div>`).join('');
+      byId('prompterText').style.fontSize = `${fontSize}px`;
+      scrollY = 0;
+      syncTextTransform();
+      syncProgress();
+      requestAnimationFrame(buildParagraphPositions);
+      return true;
+    }
+
+    function showCountdown(cb) {
+      let n = 3;
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#04070e;z-index:200;color:#65d3ff;font-family:JetBrains Mono,monospace';
+      overlay.innerHTML = '<div id="countNum" style="font-size:110px;font-weight:700;text-shadow:0 0 35px rgba(101,211,255,.5)">3</div><div style="letter-spacing:.2em;color:#8aa4d8">GET READY</div>';
+      document.body.appendChild(overlay);
+
+      const t = setInterval(() => {
+        n--;
+        const num = overlay.querySelector('#countNum');
+        if (n > 0) num.textContent = String(n);
+        else if (n === 0) num.textContent = 'GO';
+        else {
+          clearInterval(t);
+          overlay.remove();
+          cb();
+        }
+      }, 900);
+    }
+
+    function startPrompter() {
+      if (!renderScript()) return;
+      playing = false;
+      lastTs = null;
+      updateUI();
+      showCountdown(() => {
+        goTo('prompter');
+        playing = true;
+        lastTs = null;
+        updateUI();
+        sendStateToRemote();
+        showControlsNow();
+      });
+    }
+
+    function togglePlay() {
+      playing = !playing;
+      lastTs = null;
+      updateUI();
+      sendStateToRemote();
+      if (playing) showControlsNow();
+    }
+
+    function changeSpeed(delta) {
+      speed = Math.max(0.5, Math.min(10, speed + delta));
+      updateUI();
+      sendStateToRemote();
+    }
+
+    function changeFont(delta) {
+      fontSize = Math.max(18, Math.min(84, fontSize + delta));
+      byId('prompterText').style.fontSize = `${fontSize}px`;
+      buildParagraphPositions();
+      syncProgress();
+      updateUI();
+      sendStateToRemote();
+    }
+
+    function resetScroll() {
+      scrollY = 0;
+      playing = false;
+      lastTs = null;
+      syncTextTransform();
+      syncProgress();
+      updateUI();
+      sendStateToRemote();
+    }
+
+    function exitPrompter() {
+      playing = false;
+      lastTs = null;
+      scrollY = 0;
+      updateUI();
+      sendStateToRemote();
+      goTo('setup');
+    }
+
+    function loop(ts) {
+      if (!lastTs) lastTs = ts;
+      const dt = ts - lastTs;
+      lastTs = ts;
+
+      if (playing && byId('prompterScreen').classList.contains('active')) {
+        const el = byId('prompterText');
+        const max = maxScroll(el);
+        scrollY += (speed * 42) * (dt / 1000);
+
+        if (scrollY >= max) {
+          scrollY = max;
+          playing = false;
+          updateUI();
+          sendStateToRemote();
+        }
+
+        syncTextTransform();
+        syncProgress();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    byId('speedInput').oninput = (e) => {
+      speed = parseFloat(e.target.value);
+      updateUI();
+    };
+
+    byId('fontInput').oninput = (e) => {
+      fontSize = parseInt(e.target.value, 10);
+      updateUI();
+    };
+
+    byId('touchNav').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      if (btn.dataset.dir === 'prev') goToPrevParagraph();
+      if (btn.dataset.dir === 'next') goToNextParagraph();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+      if (e.code === 'ArrowUp') { e.preventDefault(); changeSpeed(0.5); }
+      if (e.code === 'ArrowDown') { e.preventDefault(); changeSpeed(-0.5); }
+      if (e.code === 'ArrowLeft') { e.preventDefault(); goToPrevParagraph(); }
+      if (e.code === 'ArrowRight') { e.preventDefault(); goToNextParagraph(); }
+      if (e.code === 'Escape') exitPrompter();
+      if (e.code === 'KeyR') resetScroll();
+    });
+
+    setVersionFooter();
+    updateUI();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

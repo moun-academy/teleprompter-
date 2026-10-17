@@ -362,6 +362,12 @@ kbd { min-width: 23px; padding: 3px 6px; border: 1px solid #d3d1cb; border-botto
   .remote-play { width: 96px; height: 96px; }
 }
 
+.stage-remote-help small { max-width: 360px; color: #d5d7db; font-size: 12px; line-height: 1.5; }
+.stage-remote-help:has(small:not([hidden])) { display: grid; gap: 10px; }
+.stage-remote-help .button { min-height: 40px; }
+#remote-connect-status:empty { display: none; }
+button:disabled, input:disabled { cursor: not-allowed; opacity: .55; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "test": "node --experimental-vm-modules --test",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
-    "mammoth": "^1.12.2"
+    "mammoth": "^1.12.2",
+    "postgres": "3.4.8"
   },
   "devDependencies": {
     "vite": "^7.1.3"

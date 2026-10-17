@@ -45,3 +45,29 @@ Deploy the `dist` output to any HTTPS host. On Android, open the URL in Chrome a
 4. The laptop now controls the phone through the shared Promptly cloud room. Both devices need internet, but they do not need the same Wi-Fi.
 
 The laptop is only marked connected after the phone answers. Heartbeats detect interruptions, and important control messages retry safely until the phone confirms them.
+
+## Remote availability and recovery
+
+Supabase's free projects can pause after a week of low database activity, even
+when the frontend still loads. Resume the existing project in Supabase Dashboard
+if it is already paused. Retrying in the app cannot resume a paused server.
+
+This project now deploys a daily Vercel Cron to `/api/remote-health`. It uses the
+server-only `RELAY_POSTGRES_URL` (or existing `POSTGRES_URL`) to execute three `SELECT 1` queries. It reads no
+scripts or user records. A failed check returns HTTP 503 without leaking database
+details. The service worker never caches API requests. Regular database activity
+reduces inactivity pauses; the free plan still has no uptime guarantee.
+
+When replacing an unavailable relay, connect the replacement through Vercel with
+the `RELAY_` prefix. The build prioritizes `RELAY_SUPABASE_URL` and
+`RELAY_SUPABASE_PUBLISHABLE_KEY` / `RELAY_SUPABASE_ANON_KEY`. The previous integration
+can remain connected without overwriting its variables. Database passwords and
+service-role keys are never included in the browser bundle.
+
+The phone keeps the same code while retrying, and retries on a restored network
+or when returning to the app. The laptop disables controls during an interruption
+and receives a fresh state snapshot when the phone answers again. Controls sent
+while disconnected are rejected rather than replayed unexpectedly later.
+
+The separate MOUN app previously on GitHub main is preserved at
+`legacy/moun-teleprompter.html`; Promptly remains the primary app.

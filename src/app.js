@@ -14,13 +14,14 @@ import { cleanSessionCode, connectRemote, createStageSession } from "./remote-li
 
 const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.2.0";
 
 let activeScript = getActiveScript();
 let settings = getSettings();
 let installPrompt = null;
 let stageController = null;
 let sessionController = null;
+let remoteController = null;
 let saveTimer = null;
 
 const icons = {
@@ -104,6 +105,8 @@ function scriptCard(script) {
 }
 
 function renderWorkspace() {
+  remoteController?.close();
+  remoteController = null;
   const library = getLibrary();
   app.innerHTML = shell(`
     <header class="page-header">
@@ -386,8 +389,10 @@ function createTeleprompterStage(script, promptSettings) {
       <button class="stage-icon-button" data-stage="fullscreen" aria-label="Full screen">${icons.fullscreen}</button>
     </div>
     <div class="stage-remote-help" id="stage-remote-help">
-      <span>On your laptop, open Remote and enter</span>
+      <span id="stage-remote-instruction">Connecting to remote service…</span>
       <strong id="stage-remote-code">······</strong>
+      <small id="stage-remote-error" role="status" hidden></small>
+      <button class="button" data-stage="retry-remote" hidden>Retry connection</button>
     </div>
     <div class="reading-guide ${promptSettings.cueLine ? "" : "hidden"}"><span></span></div>
     <div class="stage-viewport" id="stage-viewport">
@@ -429,6 +434,9 @@ function createTeleprompterStage(script, promptSettings) {
   const connectionDot = stage.querySelector("#connection-dot");
   const remoteHelp = stage.querySelector("#stage-remote-help");
   const remoteCode = stage.querySelector("#stage-remote-code");
+  const remoteInstruction = stage.querySelector("#stage-remote-instruction");
+  const remoteError = stage.querySelector("#stage-remote-error");
+  const retryRemote = stage.querySelector('[data-stage="retry-remote"]');
   let running = false;
   let speed = promptSettings.speed;
   let fontSize = promptSettings.fontSize;
@@ -622,6 +630,10 @@ function createTeleprompterStage(script, promptSettings) {
     sessionLabel.innerHTML = `Remote code <strong>${code}</strong>`;
     remoteCode.textContent = code;
     connectionDot.classList.add("ready");
+    remoteCode.hidden = false;
+    remoteInstruction.textContent = "On your laptop, open Remote and enter";
+    remoteError.hidden = true;
+    retryRemote.hidden = true;
   });
   sessionController.on("connected", () => {
     sessionLabel.textContent = "Laptop connected";
@@ -638,7 +650,19 @@ function createTeleprompterStage(script, promptSettings) {
   });
   sessionController.on("reconnecting", () => {
     sessionLabel.textContent = "Reconnecting remote…";
-    connectionDot.classList.remove("connected");
+    connectionDot.classList.remove("connected", "ready");
+    remoteHelp.classList.remove("hidden");
+    remoteCode.hidden = true;
+    remoteInstruction.textContent = "Reconnecting to remote service…";
+    remoteError.hidden = true;
+    retryRemote.hidden = true;
+  });
+  sessionController.on("unavailable", (error) => {
+    sessionLabel.textContent = "Remote temporarily offline";
+    remoteInstruction.textContent = "Remote temporarily unavailable";
+    remoteError.textContent = error.message;
+    remoteError.hidden = false;
+    retryRemote.hidden = false;
   });
   sessionController.on("message", handleRemoteMessage);
   sessionController.on("error", (error) => {
@@ -699,6 +723,7 @@ function createTeleprompterStage(script, promptSettings) {
     if (action === "reset") reset();
     if (action === "settings" && !running) setPhoneSettingsOpen(!stageControls.classList.contains("settings-open"));
     if (action === "check-update") checkForLatestUpdate();
+    if (action === "retry-remote") sessionController?.retry();
   }));
   speedInput.addEventListener("input", () => applyPatch({ speed: Number(speedInput.value) }));
   sizeInput.addEventListener("input", () => applyPatch({ fontSize: Number(sizeInput.value) }));
@@ -713,6 +738,8 @@ function createTeleprompterStage(script, promptSettings) {
 }
 
 function renderRemoteLanding() {
+  remoteController?.close();
+  remoteController = null;
   stageController?.destroy();
   const params = new URLSearchParams(location.search);
   const initialCode = cleanSessionCode(params.get("code") || "");
@@ -737,6 +764,7 @@ function renderRemoteLanding() {
                 <input id="session-code" maxlength="6" autocomplete="one-time-code" spellcheck="false" value="${escapeHtml(initialCode)}" placeholder="ABC123" />
                 <button class="button primary" id="connect-remote">Connect laptop</button>
               </div>
+              <p id="remote-connect-status" role="status" aria-live="polite"></p>
             </div>
           </section>
         </div>
@@ -767,17 +795,34 @@ function connectToStage() {
     return;
   }
   const button = document.querySelector("#connect-remote");
+  if (button.disabled) return;
+  const connectionStatus = document.querySelector("#remote-connect-status");
+  connectionStatus.textContent = "Connecting to the remote service…";
   setButtonBusy(button, true, "Connecting…");
   const remote = connectRemote(code);
+  remoteController = remote;
   let settled = false;
+  let serviceReady = false;
   const timeout = setTimeout(() => {
     if (!settled) {
+      settled = true;
       remote.close();
       setButtonBusy(button, false);
-      toast("That phone is not online with this code. Keep its teleprompter open and try again.", "error");
+      connectionStatus.textContent = serviceReady
+        ? "The service is online, but this phone has not answered. Check its code and keep the teleprompter open."
+        : "The connection service is unavailable. Retry shortly; you do not need to change Wi-Fi.";
     }
-  }, 12000);
+  }, 30000);
+  remote.on("connecting", () => {
+    serviceReady = true;
+    connectionStatus.textContent = "Service connected. Waiting for the phone…";
+  });
+  remote.on("unavailable", (error) => {
+    if (!settled) connectionStatus.textContent = error.message;
+  });
   remote.on("connected", () => {
+    if (settled) return;
+    if (!button.isConnected) { remote.close(); return; }
     settled = true;
     clearTimeout(timeout);
     renderRemoteControls(remote, code);
@@ -789,6 +834,7 @@ function connectToStage() {
     remote.close();
     setButtonBusy(button, false);
     toast(error.message, "error");
+    connectionStatus.textContent = error.message;
   });
 }
 
@@ -796,7 +842,7 @@ function renderRemoteControls(remote, code) {
   app.innerHTML = shell(`
     <section class="control-room">
       <header class="control-header">
-        <div><span class="live-pill"><i></i> Connected</span><h1 id="remote-title">Teleprompter</h1><p>Session <strong>${escapeHtml(code)}</strong></p></div>
+        <div><span class="live-pill" id="remote-connection-status"><i></i> Connected</span><h1 id="remote-title">Teleprompter</h1><p>Session <strong>${escapeHtml(code)}</strong></p></div>
         <button class="button ghost" id="disconnect-remote">Disconnect</button>
       </header>
       <div class="control-grid">
@@ -841,11 +887,17 @@ function renderRemoteControls(remote, code) {
   };
 
   remote.on("message", (message) => { if (message?.type === "state") update(message.state); });
-  remote.on("reconnecting", () => toast("Connection interrupted. Reconnecting…", "error"));
+  const setConnectionStatus = (connected, label) => {
+    document.querySelector("#remote-connection-status").textContent = label;
+    document.querySelectorAll(".transport-card button, .transport-card input, .remote-adjustments input")
+      .forEach((control) => { control.disabled = !connected; });
+  };
+  remote.on("connected", () => setConnectionStatus(true, "Connected"));
+  remote.on("reconnecting", () => setConnectionStatus(false, "Reconnecting…"));
+  remote.on("unavailable", () => setConnectionStatus(false, "Connection service offline — retrying…"));
   remote.on("error", (error) => toast(error.message, "error"));
   remote.on("disconnected", () => {
-    toast("Phone disconnected.", "error");
-    renderRemoteLanding();
+    setConnectionStatus(false, "Waiting for the phone to reconnect…");
   });
   play.addEventListener("click", () => remote.send({ type: "command", action: "toggle" }));
   document.querySelectorAll("[data-command]").forEach((button) => button.addEventListener("click", () => remote.send({

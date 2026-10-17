@@ -70,9 +70,11 @@ function cloudSession(role, rawCode) {
   let lastPeerActivity = 0;
   let heartbeatTimer;
   let retryTimer;
-  let readyEmitted = false;
+  let serviceTimer;
+  let serviceUnavailable = false;
+  let subscriptionAttempt = 0;
 
-  const sendRaw = (payload) => broadcast(channel, outboundEvent, {
+  const sendRaw = (payload) => subscribed && !manuallyClosed && broadcast(channel, outboundEvent, {
     ...payload,
     code,
     senderId: id,
@@ -83,6 +85,7 @@ function cloudSession(role, rawCode) {
     lastPeerActivity = Date.now();
     if (connected) return;
     connected = true;
+    pending.clear();
     events.emit("connected", { code });
   };
 
@@ -99,7 +102,10 @@ function cloudSession(role, rawCode) {
     if (role === "stage") {
       if (message.type === "hello" || message.type === "heartbeat") {
         markConnected();
-        if (message.type === "hello") sendRaw({ type: "hello-ack", targetId: message.senderId });
+        if (message.type === "hello") {
+          sendRaw({ type: "hello-ack", targetId: message.senderId });
+          events.emit("message", { type: "hello" });
+        }
         return;
       }
       if (message.type === "command" || message.type === "settings") {
@@ -144,6 +150,7 @@ function cloudSession(role, rawCode) {
       sendRaw({ type: role === "remote" && !connected ? "hello" : "heartbeat" });
       if (connected && Date.now() - lastPeerActivity > CONNECTION_TIMEOUT_MS) {
         connected = false;
+        pending.clear();
         events.emit("disconnected");
       }
     }, HEARTBEAT_MS);
@@ -164,7 +171,23 @@ function cloudSession(role, rawCode) {
     }, 250);
   };
 
-  queueMicrotask(() => {
+  const waitForService = () => {
+    clearTimeout(serviceTimer);
+    serviceTimer = setTimeout(() => {
+      serviceTimer = undefined;
+      if (manuallyClosed || subscribed || serviceUnavailable) return;
+      serviceUnavailable = true;
+      events.emit("unavailable", new Error("The connection service is unavailable. It may be temporarily offline. Your script still works; retry the remote shortly."));
+    }, CONNECTION_TIMEOUT_MS);
+  };
+
+  const subscribe = async () => {
+    const attempt = ++subscriptionAttempt;
+    if (manuallyClosed) return;
+    subscribed = false;
+    connected = false;
+    pending.clear();
+    waitForService();
     let client;
     try {
       client = getRealtimeClient();
@@ -173,18 +196,20 @@ function cloudSession(role, rawCode) {
       return;
     }
 
+    if (channel) await client.removeChannel(channel);
+    if (manuallyClosed || attempt !== subscriptionAttempt) return;
     channel = client.channel(`promptly:${code.toLowerCase()}`, {
       config: { broadcast: { ack: true, self: false } }
     });
     channel.on("broadcast", { event: inboundEvent }, ({ payload }) => receive(payload));
     channel.subscribe((status) => {
-      if (manuallyClosed) return;
+      if (manuallyClosed || attempt !== subscriptionAttempt) return;
       if (status === "SUBSCRIBED") {
         subscribed = true;
-        if (role === "stage" && !readyEmitted) {
-          readyEmitted = true;
-          events.emit("ready", { code });
-        }
+        serviceUnavailable = false;
+        clearTimeout(serviceTimer);
+        serviceTimer = undefined;
+        if (role === "stage") events.emit("ready", { code });
         if (role === "remote") {
           events.emit("connecting", { code });
           sendRaw({ type: "hello" });
@@ -194,18 +219,39 @@ function cloudSession(role, rawCode) {
       }
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         subscribed = false;
+        connected = false;
+        pending.clear();
         events.emit("reconnecting", { code });
+        if (!serviceTimer) waitForService();
       }
       if (status === "CLOSED") subscribed = false;
     });
-  });
+  };
+
+  const retry = () => {
+    if (manuallyClosed || subscribed) return;
+    serviceUnavailable = false;
+    events.emit("reconnecting", { code });
+    subscribe().catch((error) => events.emit("error", error));
+  };
+  const resume = () => {
+    if (typeof document === "undefined" || document.visibilityState === "visible") retry();
+  };
+  globalThis.addEventListener?.("online", retry);
+  globalThis.document?.addEventListener("visibilitychange", resume);
+  queueMicrotask(retry);
 
   return {
     code,
     on: events.on,
+    retry,
     send(payload) {
       if (!payload || manuallyClosed) return;
       if (role === "remote" && (payload.type === "command" || payload.type === "settings")) {
+        if (!subscribed || !connected) {
+          events.emit("error", new Error("Waiting for the phone to reconnect. Try the control again once connected."));
+          return;
+        }
         const messageId = clientId();
         const reliablePayload = { ...payload, messageId };
         pending.set(messageId, { payload: reliablePayload, attempts: 1, lastAttempt: Date.now() });
@@ -220,6 +266,9 @@ function cloudSession(role, rawCode) {
       connected = false;
       clearInterval(heartbeatTimer);
       clearInterval(retryTimer);
+      clearTimeout(serviceTimer);
+      globalThis.removeEventListener?.("online", retry);
+      globalThis.document?.removeEventListener("visibilitychange", resume);
       pending.clear();
       if (channel) getRealtimeClient().removeChannel(channel);
     }
