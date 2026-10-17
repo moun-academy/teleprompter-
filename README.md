@@ -58,6 +58,13 @@ scripts or user records. A failed check returns HTTP 503 without leaking databas
 details. The service worker never caches API requests. Regular database activity
 reduces inactivity pauses; the free plan still has no uptime guarantee.
 
+An independent GitHub Actions workflow, **Keep remote available**, calls this
+live database check every six hours, retries transient failures, and fails visibly
+if the database is unavailable. It needs no repository secrets or running computer.
+The daily Vercel check remains the primary scheduler: GitHub may disable scheduled
+workflows in public repositories after 60 days without repository activity.
+Either scheduler generates real database queries rather than just loading the app.
+
 When replacing an unavailable relay, connect the replacement through Vercel with
 the `RELAY_` prefix. The build prioritizes `RELAY_SUPABASE_URL` and
 `RELAY_SUPABASE_PUBLISHABLE_KEY` / `RELAY_SUPABASE_ANON_KEY`. The previous integration
