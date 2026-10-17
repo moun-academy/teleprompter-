@@ -7,7 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
   <style>
     :root {
       --bg: #070b14;
@@ -377,20 +376,25 @@
     let paraPositions = [];
     let ctrlHideTimer = null;
 
-    const PEER_CONFIG = {
-      debug: 1,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-        ],
-        iceTransportPolicy: 'all'
-      }
-    };
+    // Transport: ntfy.sh public pub/sub relay over HTTPS (works on any network, no WebRTC/NAT/TURN).
+    // Two topics per room: -c (remote -> prompter) and -s (prompter -> remote).
+    const RELAY = 'https://ntfy.sh/';
+    const topicOf = (code, dir) => `moun-tp-${code}-${dir}`;
+
+    function relaySend(topic, msg) {
+      return fetch(RELAY + topic, { method: 'POST', body: JSON.stringify(msg) })
+        .catch(e => console.warn('send failed', e));
+    }
+
+    function relaySubscribe(topic, onMsg, onState) {
+      const es = new EventSource(`${RELAY}${topic}/sse`);
+      es.onopen = () => onState && onState(true);
+      es.onerror = () => onState && onState(false); // EventSource auto-reconnects
+      es.addEventListener('message', (ev) => {
+        try { onMsg(JSON.parse(JSON.parse(ev.data).message)); } catch (_) {}
+      });
+      return es;
+    }
 
     function byId(id) { return document.getElementById(id); }
 
@@ -419,37 +423,22 @@
       isHost = true;
       roomCode = genRoomCode();
       byId('roomCode').textContent = roomCode;
-
-      const peerId = `moun-tp-${roomCode}`;
-      hostPeer = new Peer(peerId, PEER_CONFIG);
       updateHostStatus('Starting host...', false);
+      if (hostPeer) hostPeer.close();
 
-      hostPeer.on('open', () => updateHostStatus('Host online', true));
-
-      hostPeer.on('connection', (conn) => {
-        if (hostConn && hostConn.open) hostConn.close();
-        hostConn = conn;
-        updateHostStatus('Remote connected', true);
-
-        hostConn.on('open', () => sendStateToRemote());
-        hostConn.on('data', onHostCommand);
-        hostConn.on('close', () => {
-          updateHostStatus('Remote disconnected', false);
-          hostConn = null;
-        });
-        hostConn.on('error', () => {
-          updateHostStatus('Remote connection error', false);
-        });
-      });
-
-      hostPeer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-          try { hostPeer.destroy(); } catch (_) {}
-          hostPeer = null;
-          setTimeout(initHost, 300);
-          return;
+      const sTopic = topicOf(roomCode, 's');
+      hostPeer = relaySubscribe(topicOf(roomCode, 'c'), (m) => {
+        if (!m) return;
+        if (m.action === 'hello') {
+          hostConn = { open: true, send: (x) => relaySend(sTopic, x) };
+          hostConn.send({ type: 'ack' });
+          updateHostStatus('Remote connected', true);
+          sendStateToRemote();
+        } else {
+          onHostCommand(m);
         }
-        updateHostStatus(`Host error: ${err.type}`, false);
+      }, (ok) => {
+        if (!hostConn) updateHostStatus(ok ? 'Host online' : 'Reconnecting...', ok);
       });
     }
 
@@ -474,6 +463,8 @@
       el.className = `status ${cls}`;
     }
 
+    let helloTimer = null, joinTimer = null;
+
     function joinRoom() {
       const code = [0,1,2,3].map(i => byId(`d${i}`).value).join('');
       if (!/^\d{4}$/.test(code)) {
@@ -481,58 +472,46 @@
         return;
       }
 
+      if (remotePeer) remotePeer.close();
+      clearTimeout(joinTimer); clearInterval(helloTimer); helloTimer = null;
       setJoinStatus('Connecting to host...');
-      if (remotePeer) {
-        try { remotePeer.destroy(); } catch (_) {}
-        remotePeer = null;
-      }
 
-      remotePeer = new Peer(undefined, PEER_CONFIG);
+      const cTopic = topicOf(code, 'c');
       let done = false;
 
-      const timeout = setTimeout(() => {
-        if (!done) {
-          setJoinStatus('Connection timeout. Keep host page open and retry.', 'err');
-          try { remotePeer.destroy(); } catch (_) {}
-        }
-      }, 15000);
-
-      remotePeer.on('open', () => {
-        remoteConn = remotePeer.connect(`moun-tp-${code}`, {
-          reliable: true,
-          serialization: 'json'
-        });
-
-        remoteConn.on('open', () => {
+      // Subscribe first so the reply can't be missed, then say hello until acknowledged.
+      remotePeer = relaySubscribe(topicOf(code, 's'), (m) => {
+        if (!m) return;
+        if (m.type === 'ack' && !done) {
           done = true;
-          clearTimeout(timeout);
+          clearTimeout(joinTimer); clearInterval(helloTimer);
+          remoteConn = { open: true, send: (x) => relaySend(cTopic, x), close: () => {} };
           setJoinStatus('Connected!', 'ok');
           goTo('remote');
-        });
-
-        remoteConn.on('data', onRemoteState);
-        remoteConn.on('close', () => {
-          setJoinStatus('Disconnected from host.', 'err');
-          goTo('join');
-        });
-
-        remoteConn.on('error', () => {
-          setJoinStatus('Failed to communicate with host.', 'err');
-        });
+        } else {
+          onRemoteState(m);
+        }
+      }, (ok) => {
+        if (ok && !helloTimer && !done) {
+          setJoinStatus('Finding teleprompter...');
+          const hello = () => relaySend(cTopic, { action: 'hello' });
+          hello();
+          helloTimer = setInterval(hello, 2000);
+        }
       });
 
-      remotePeer.on('error', (err) => {
-        clearTimeout(timeout);
-        setJoinStatus(err.type === 'peer-unavailable' ? 'Host code not found.' : `Error: ${err.type}`, 'err');
-      });
+      joinTimer = setTimeout(() => {
+        if (done) return;
+        clearInterval(helloTimer); helloTimer = null;
+        remotePeer.close(); remotePeer = null;
+        setJoinStatus('Teleprompter not found. Check the code, and that both devices are online.', 'err');
+      }, 15000);
     }
 
     function disconnectRemote() {
-      if (remoteConn && remoteConn.open) remoteConn.close();
-      if (remotePeer) {
-        try { remotePeer.destroy(); } catch (_) {}
-        remotePeer = null;
-      }
+      clearTimeout(joinTimer); clearInterval(helloTimer); helloTimer = null;
+      if (remotePeer) { remotePeer.close(); remotePeer = null; }
+      remoteConn = null;
       goTo('join');
     }
 
